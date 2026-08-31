@@ -1,0 +1,53 @@
+name: Crumb
+options:
+  bundleIdPrefix: nl.tiendo
+  deploymentTarget:
+    macOS: "14.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    DEVELOPMENT_TEAM: VJ9D2C765N
+    CODE_SIGN_STYLE: Automatic
+    SWIFT_VERSION: "5.10"
+targets:
+  Crumb:
+    type: application
+    platform: macOS
+    sources:
+      - Crumb
+      - Core
+    dependencies:
+      - sdk: libsqlite3.tbd
+    info:
+      path: Crumb/Info.plist
+      properties:
+        CFBundleDisplayName: Crumb
+        LSUIElement: true
+        NSPrincipalClass: NSApplication
+        NSHighResolutionCapable: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: nl.tiendo.crumb
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.utilities
+  CrumbTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - Tests
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: true
+    dependencies:
+      - target: Crumb
+schemes:
+  Crumb:
+    build:
+      targets:
+        Crumb: all
+        CrumbTests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - CrumbTests
