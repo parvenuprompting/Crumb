@@ -13,6 +13,9 @@ struct ScanRun: Codable, Hashable, Sendable {
     let finishedAt: Date
     let sources: [ScanSourceStatus]
     let records: [CookieRecord]
+    var aiUsed: Bool? = nil
+    var aiClassifiedCount: Int? = nil
+    var aiSkippedReason: String? = nil
 
     var categoryCounts: [CookieCategory: Int] {
         Dictionary(grouping: records, by: \.category).mapValues(\.count)

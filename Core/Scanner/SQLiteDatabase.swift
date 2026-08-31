@@ -29,9 +29,9 @@ enum SQLiteValue {
 final class SQLiteDatabase {
     private var handle: OpaquePointer?
 
-    init(path: String) throws {
+    init(path: String, readWrite: Bool = false) throws {
         var db: OpaquePointer?
-        let flags = SQLITE_OPEN_READONLY
+        let flags = readWrite ? SQLITE_OPEN_READWRITE : SQLITE_OPEN_READONLY
         guard sqlite3_open_v2(path, &db, flags, nil) == SQLITE_OK, let db else {
             let message = db.map { String(cString: sqlite3_errmsg($0)) } ?? "onbekende fout"
             sqlite3_close(db)
@@ -58,6 +58,26 @@ final class SQLiteDatabase {
             }
         }
         return names
+    }
+
+    func execute(_ sql: String, parameters: [String] = []) throws -> Int {
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(handle, sql, -1, &stmt, nil) == SQLITE_OK else {
+            throw CookieScanError.readFailed(String(cString: sqlite3_errmsg(handle)))
+        }
+        defer { sqlite3_finalize(stmt) }
+
+        let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+        for (index, value) in parameters.enumerated() {
+            guard sqlite3_bind_text(stmt, Int32(index + 1), value, -1, transient) == SQLITE_OK else {
+                throw CookieScanError.readFailed(String(cString: sqlite3_errmsg(handle)))
+            }
+        }
+
+        guard sqlite3_step(stmt) == SQLITE_DONE else {
+            throw CookieScanError.readFailed(String(cString: sqlite3_errmsg(handle)))
+        }
+        return Int(sqlite3_changes(handle))
     }
 
     func query(_ sql: String) throws -> [[String: SQLiteValue]] {

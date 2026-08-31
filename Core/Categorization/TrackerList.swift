@@ -8,7 +8,16 @@ struct TrackerList: Sendable {
     }
 
     init?(bundle: Bundle = .main) {
-        guard let url = bundle.url(forResource: "tracker-domains", withExtension: "txt"),
+        var resourceURL = bundle.url(forResource: "tracker-domains", withExtension: "txt")
+        if resourceURL == nil, let executablePath = CommandLine.arguments.first {
+            let candidate = URL(fileURLWithPath: executablePath)
+                .deletingLastPathComponent()
+                .appendingPathComponent("../Resources/tracker-domains.txt")
+            if FileManager.default.fileExists(atPath: candidate.standardizedFileURL.path) {
+                resourceURL = candidate
+            }
+        }
+        guard let url = resourceURL,
               let contents = try? String(contentsOf: url, encoding: .utf8) else {
             return nil
         }

@@ -1,0 +1,52 @@
+import Foundation
+
+struct AuditEntry: Codable, Sendable {
+    let timestamp: Date
+    let mode: String
+    let browser: String
+    let domain: String
+    let name: String
+    let path: String
+    let category: String
+    let verdict: String
+    let reasoning: String
+    let result: String
+    let detail: String?
+}
+
+enum AuditLog {
+    static var fileURL: URL {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support/Crumb/audit.jsonl")
+    }
+
+    static func append(_ entries: [AuditEntry]) throws {
+        guard !entries.isEmpty else { return }
+        let dir = fileURL.deletingLastPathComponent()
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        var lines = ""
+        for entry in entries {
+            lines += String(data: try encoder.encode(entry), encoding: .utf8)! + "\n"
+        }
+        let handle = try FileHandle(forWritingTo: fileURL)
+        defer { try? handle.close() }
+        try handle.seekToEnd()
+        try handle.write(contentsOf: Data(lines.utf8))
+    }
+
+    static func allEntries(limit: Int = 200) -> [AuditEntry] {
+        guard let contents = try? String(contentsOf: fileURL, encoding: .utf8) else { return [] }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return contents
+            .split(separator: "\n")
+            .suffix(limit)
+            .compactMap { line -> AuditEntry? in
+                guard let data = line.data(using: .utf8) else { return nil }
+                return try? decoder.decode(AuditEntry.self, from: data)
+            }
+            .reversed()
+    }
+}

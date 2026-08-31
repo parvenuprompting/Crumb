@@ -12,9 +12,12 @@ struct MainContentView: View {
             CookieListView()
                 .tabItem { Text("Cookies") }
                 .tag(1)
+            TrendsView()
+                .tabItem { Text("Trends") }
+                .tag(2)
             SettingsView()
                 .tabItem { Text("Instellingen") }
-                .tag(2)
+                .tag(3)
         }
         .padding()
     }
@@ -40,6 +43,16 @@ struct MenuPanelView: View {
                 Text("Laatste scan: \(run.finishedAt.runTimestamp)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                if let used = run.aiUsed, used {
+                    Text("AI: \(run.aiClassifiedCount ?? 0) beoordeeld")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                if let reason = run.aiSkippedReason {
+                    Text(reason)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
 
                 Divider()
 

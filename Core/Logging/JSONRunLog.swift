@@ -40,6 +40,22 @@ enum JSONRunLog {
         return run
     }
 
+    static func allRuns(limit: Int = 30) -> [ScanRun] {
+        let fm = FileManager.default
+        guard let files = try? fm.contentsOfDirectory(at: logsDirectory, includingPropertiesForKeys: nil)
+            .filter({ $0.pathExtension == "json" && $0.lastPathComponent.hasPrefix("run-") })
+            .sorted(by: { $0.lastPathComponent < $1.lastPathComponent })
+            .suffix(limit) else {
+            return []
+        }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return files.compactMap { url in
+            guard let data = try? Data(contentsOf: url) else { return nil }
+            return try? decoder.decode(ScanRun.self, from: data)
+        }
+    }
+
     static func deleteLogs(olderThan interval: TimeInterval, now: Date = Date()) throws -> Int {
         let fm = FileManager.default
         guard let files = try? fm.contentsOfDirectory(at: logsDirectory, includingPropertiesForKeys: [.contentModificationDateKey]) else {

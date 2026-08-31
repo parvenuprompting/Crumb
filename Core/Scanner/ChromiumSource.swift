@@ -21,16 +21,13 @@ struct ChromiumSource: CookieSource {
 
     var browserName: String { config.browserName }
 
-    var isInstalled: Bool { !profileCookieURLs.isEmpty }
+    var isInstalled: Bool { !Self.cookieStoreURLs(for: config).isEmpty }
 
-    private var rootURL: URL {
-        fileManager.homeDirectoryForCurrentUser
+    static func cookieStoreURLs(for config: ChromiumBrowserConfig) -> [URL] {
+        let rootURL = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Application Support")
             .appendingPathComponent(config.appSupportRelativePath)
-    }
-
-    private var profileCookieURLs: [URL] {
-        guard let enumerator = fileManager.enumerator(
+        guard let enumerator = FileManager.default.enumerator(
             at: rootURL,
             includingPropertiesForKeys: [.isDirectoryKey],
             options: [.skipsPackageDescendants]
@@ -46,7 +43,7 @@ struct ChromiumSource: CookieSource {
 
     func scan() throws -> [RawCookie] {
         var cookies: [RawCookie] = []
-        for storeURL in profileCookieURLs {
+        for storeURL in Self.cookieStoreURLs(for: config) {
             let copyURL = try StoreCopier.copyStore(at: storeURL)
             defer { try? fileManager.removeItem(at: copyURL.deletingLastPathComponent()) }
             cookies.append(contentsOf: try readStore(at: copyURL))

@@ -86,6 +86,9 @@ struct RawCookie: Sendable {
     var isHttpOnly: Bool
     var isSessionOnly: Bool
     var browser: String = ""
+    var aiCategory: CookieCategory?
+    var aiVerdict: LLMVerdict?
+    var aiReasoning: String?
 }
 
 enum CookieScanError: LocalizedError {

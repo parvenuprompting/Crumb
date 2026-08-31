@@ -72,6 +72,18 @@ xcodebuild -scheme Crumb test -destination 'platform=macOS'
 
 Elke run schrijft een JSON-rapport naar `~/Library/Application Support/Crumb/logs/`. Verwijderingen worden gelogd in `audit.jsonl` (wat, wanneer, welke regel/LLM-uitspraak). Opruimen van oude logs is een expliciete handmatige actie in Instellingen.
 
+## Distributie (Developer ID + notarization)
+
+```bash
+# eenmalig: notarytool-profiel aanmaken
+xcrun notarytool store-credentials CrumbNotary \
+  --apple-id "jij@example.com" --team-id VJ9D2C765N --password <app-specific password>
+
+./scripts/build-release.sh
+```
+
+Het script bouwt Release, tekent met hardened runtime (inclusief de embedded `CrumbAgent`), dient in bij Apple-notarization en neemt het ticket op (staple). De app is **niet sandboxed** — distributie buiten de Mac App Store.
+
 ## Roadmap
 
 - [x] Fase 1–3 — Scanner (Chrome, Brave, Safari, Firefox) + regel-laag + safelist
@@ -79,4 +91,4 @@ Elke run schrijft een JSON-rapport naar `~/Library/Application Support/Crumb/log
 - [x] Fase 5 — Trends & run-geschiedenis
 - [x] Fase 6 — LaunchAgent (RunAtLoad + elke 3 uur)
 - [x] Fase 7 — Handmatige verwijdering + opt-in auto-clean + audit-log
-- [ ] Fase 8 — Developer ID-signing + notarization voor distributie
+- [x] Fase 8 — Developer ID-signing + notarization (`scripts/build-release.sh`)

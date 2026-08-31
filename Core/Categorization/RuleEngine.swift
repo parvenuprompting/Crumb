@@ -44,6 +44,10 @@ struct RuleEngine: Sendable {
         }
     }
 
+    func provisionalCategory(for raw: RawCookie) -> CookieCategory {
+        nonEssentialCategory(raw: raw)
+    }
+
     private func nonEssentialCategory(raw: RawCookie) -> CookieCategory {
         if Self.isAnalyticsName(raw.name) {
             return .analytics

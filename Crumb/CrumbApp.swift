@@ -5,12 +5,16 @@ struct CrumbApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @ObservedObject private var scanService = ScanService.shared
     @StateObject private var whitelist = WhitelistModel()
+    @ObservedObject private var settings = SettingsStore.shared
+    @StateObject private var history = RunHistoryModel()
 
     var body: some Scene {
         MenuBarExtra("Crumb", systemImage: "circle.dotted") {
             MenuPanelView()
                 .environmentObject(scanService)
                 .environmentObject(whitelist)
+                .environmentObject(settings)
+                .environmentObject(history)
                 .tint(.primary)
         }
         .menuBarExtraStyle(.window)
@@ -20,6 +24,8 @@ struct CrumbApp: App {
                 .frame(minWidth: 860, minHeight: 580)
                 .environmentObject(scanService)
                 .environmentObject(whitelist)
+                .environmentObject(settings)
+                .environmentObject(history)
                 .tint(.primary)
         }
         .defaultSize(width: 960, height: 640)
@@ -28,6 +34,7 @@ struct CrumbApp: App {
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
+        guard ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil else { return }
         Task { @MainActor in
             await ScanService.shared.runScan()
         }

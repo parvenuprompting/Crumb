@@ -13,10 +13,9 @@ final class ScanService: ObservableObject {
     var sourceAvailability: [SourceAvailability] {
         Self.buildSources().map { source in
             let safariAccess = (source as? SafariSource)?.isAccessible ?? true
-            let installed = source.isInstalled
             return SourceAvailability(
                 browser: source.browserName,
-                isInstalled: installed,
+                isInstalled: source.isInstalled,
                 isAccessible: safariAccess,
                 requiresFullDiskAccess: source is SafariSource && !safariAccess
             )
@@ -51,21 +50,67 @@ final class ScanService: ObservableObject {
         lastError = nil
         defer { isScanning = false }
 
-        let startedAt = Date()
-        let sources = Self.buildSources()
-        let whitelistStore = WhitelistStore.load()
-        let safelist = SafelistEngine(whitelist: Set(whitelistStore.domains.map(WhitelistStore.normalizedDomain)))
-        let now = Date()
+        let settings = SettingsStore.shared
+        let whitelist = Set(WhitelistStore.load().domains.map(WhitelistStore.normalizedDomain))
+        let ollamaEnabled = settings.ollamaEnabled
+        let ollamaModel = settings.ollamaModel
 
         guard let trackerList = TrackerList() else {
             lastError = "Tracker-domeinenlijst ontbreekt in de app-bundle."
             return
         }
-        let engine = RuleEngine(trackerList: trackerList, now: now)
 
+        let startedAt = Date()
+        let sources = Self.buildSources()
+        var (statuses, rawCookies) = await Self.scanSources(sources)
+
+        var aiUsed = false
+        var aiSkippedReason: String?
+        var aiClassified = 0
+
+        if ollamaEnabled {
+            let result = await Self.classifyWithAI(
+                rawCookies: rawCookies,
+                trackerList: trackerList,
+                model: ollamaModel,
+                now: startedAt
+            )
+            rawCookies = result.cookies
+            aiUsed = result.used
+            aiClassified = result.classifiedCount
+            aiSkippedReason = result.skippedReason
+        }
+
+        let records = await Self.buildRecords(
+            rawCookies: rawCookies,
+            whitelist: whitelist,
+            trackerList: trackerList,
+            now: startedAt
+        )
+
+        let finishedAt = Date()
+        let run = ScanRun(
+            startedAt: startedAt,
+            finishedAt: finishedAt,
+            sources: statuses,
+            records: records,
+            aiUsed: aiUsed,
+            aiClassifiedCount: aiClassified,
+            aiSkippedReason: aiSkippedReason
+        )
+        lastRun = run
+
+        do {
+            try await Self.persist(run: run)
+        } catch {
+            lastError = "Kon run niet wegschrijven: \(error.localizedDescription)"
+        }
+    }
+
+    nonisolated static func scanSources(_ sources: [any CookieSource]) async -> (statuses: [ScanSourceStatus], cookies: [RawCookie]) {
         var statuses: [ScanSourceStatus] = []
-        var rawCookies: [RawCookie] = []
-        rawCookies.reserveCapacity(2000)
+        var allCookies: [RawCookie] = []
+        allCookies.reserveCapacity(2000)
 
         for source in sources {
             guard source.isInstalled else {
@@ -78,7 +123,7 @@ final class ScanService: ObservableObject {
                     tagged.browser = source.browserName
                     return tagged
                 }
-                rawCookies.append(contentsOf: cookies)
+                allCookies.append(contentsOf: cookies)
                 statuses.append(ScanSourceStatus(browser: source.browserName, scanned: true, cookieCount: cookies.count, error: nil, requiresFullDiskAccess: false))
             } catch CookieScanError.fullDiskAccessRequired {
                 statuses.append(ScanSourceStatus(browser: source.browserName, scanned: false, cookieCount: 0, error: "Volledige Schijftoegang vereist", requiresFullDiskAccess: true))
@@ -86,7 +131,66 @@ final class ScanService: ObservableObject {
                 statuses.append(ScanSourceStatus(browser: source.browserName, scanned: false, cookieCount: 0, error: error.localizedDescription, requiresFullDiskAccess: false))
             }
         }
+        return (statuses, allCookies)
+    }
 
+    nonisolated static func classifyWithAI(
+        rawCookies: [RawCookie],
+        trackerList: TrackerList,
+        model: String,
+        now: Date
+    ) async -> (cookies: [RawCookie], used: Bool, classifiedCount: Int, skippedReason: String?) {
+        let client = OllamaClient()
+        do {
+            try await client.verify(model: model)
+            let engine = RuleEngine(trackerList: trackerList, now: now)
+            let candidates = rawCookies.filter { engine.provisionalCategory(for: $0) == .unknown }
+            let inputs = candidates.map { cookie in
+                CookiePromptInput(
+                    domain: cookie.domain,
+                    name: cookie.name,
+                    isSecure: cookie.isSecure,
+                    isHttpOnly: cookie.isHttpOnly,
+                    isSessionOnly: cookie.isSessionOnly,
+                    hasExpiry: cookie.expiry != nil,
+                    expiresInSeconds: cookie.expiry.map { Int($0.timeIntervalSince(now)) },
+                    browser: cookie.browser
+                )
+            }
+            let judgements = await client.classifyAll(model: model, cookies: inputs)
+
+            var byKey: [String: LLMCookieJudgement] = [:]
+            for judgement in judgements {
+                byKey["\(judgement.domain)|\(judgement.name)"] = judgement
+            }
+
+            var classified = 0
+            var updated = rawCookies
+            for index in updated.indices {
+                guard engine.provisionalCategory(for: updated[index]) == .unknown else { continue }
+                let key = "\(updated[index].domain.lowercased())|\(updated[index].name)"
+                guard let judgement = byKey[key] else { continue }
+                updated[index].aiCategory = judgement.category
+                updated[index].aiVerdict = judgement.verdict
+                updated[index].aiReasoning = judgement.reasoning
+                classified += 1
+            }
+            let used = !judgements.isEmpty
+            let reason: String? = used ? nil : "AI geactiveerd, maar er kwamen geen bruikbare antwoorden terug."
+            return (updated, used, classified, reason)
+        } catch {
+            return (rawCookies, false, 0, "AI-classificatie overgeslagen: \(error.localizedDescription)")
+        }
+    }
+
+    nonisolated static func buildRecords(
+        rawCookies: [RawCookie],
+        whitelist: Set<String>,
+        trackerList: TrackerList,
+        now: Date
+    ) async -> [CookieRecord] {
+        let safelist = SafelistEngine(whitelist: whitelist)
+        let engine = RuleEngine(trackerList: trackerList, now: now)
         var snapshot = SnapshotStore.load()
         var records: [CookieRecord] = []
         records.reserveCapacity(rawCookies.count)
@@ -106,12 +210,35 @@ final class ScanService: ObservableObject {
             let classified = engine.classify(raw: raw, protection: protection)
 
             var firstSeen = raw.creation ?? now
-            var lastSeen = now
             if let seen = snapshot.entries[browserAgnosticID] {
                 firstSeen = seen.firstSeen
-                lastSeen = now
             }
-            snapshot.recordLastSeen(browserAgnosticID, at: lastSeen, firstSeenFallback: firstSeen)
+            snapshot.recordLastSeen(browserAgnosticID, at: now, firstSeenFallback: firstSeen)
+
+            var category = classified.category
+            var verdict = classified.verdict
+            var reasoning = classified.reasoning
+
+            if let aiCategory = raw.aiCategory, let aiVerdict = raw.aiVerdict, protection == .none {
+                let judgement = LLMCookieJudgement(
+                    domain: raw.domain,
+                    name: raw.name,
+                    category: aiCategory,
+                    verdict: aiVerdict,
+                    reasoning: raw.aiReasoning ?? ""
+                )
+                let surrogate = CookieRecord(
+                    domain: raw.domain, name: raw.name, valueHash: "", browser: raw.browser, path: raw.path,
+                    expiry: raw.expiry, isSecure: raw.isSecure, isHttpOnly: raw.isHttpOnly,
+                    isSessionOnly: raw.isSessionOnly, firstSeen: firstSeen, lastSeen: now,
+                    category: classified.category, verdict: classified.verdict,
+                    reasoning: classified.reasoning, protection: protection
+                )
+                let outcome = AIConsensus.apply(judgement: judgement, to: surrogate)
+                category = outcome.category
+                verdict = outcome.verdict
+                reasoning = outcome.reasoning
+            }
 
             records.append(CookieRecord(
                 domain: raw.domain,
@@ -124,23 +251,19 @@ final class ScanService: ObservableObject {
                 isHttpOnly: raw.isHttpOnly,
                 isSessionOnly: raw.isSessionOnly,
                 firstSeen: firstSeen,
-                lastSeen: lastSeen,
-                category: classified.category,
-                verdict: classified.verdict,
-                reasoning: classified.reasoning,
+                lastSeen: now,
+                category: category,
+                verdict: verdict,
+                reasoning: reasoning,
                 protection: protection
             ))
         }
 
-        let finishedAt = Date()
-        let run = ScanRun(startedAt: startedAt, finishedAt: finishedAt, sources: statuses, records: records)
-        lastRun = run
+        try? snapshot.save()
+        return records
+    }
 
-        do {
-            try snapshot.save()
-            try JSONRunLog.write(run: run)
-        } catch {
-            lastError = "Kon run niet wegschrijven: \(error.localizedDescription)"
-        }
+    nonisolated static func persist(run: ScanRun) async throws {
+        try JSONRunLog.write(run: run)
     }
 }

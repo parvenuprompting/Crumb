@@ -18,6 +18,16 @@ targets:
       - Core
     dependencies:
       - sdk: libsqlite3.tbd
+      - target: CrumbAgent
+    postBuildScripts:
+      - name: Embed CrumbAgent
+        inputFiles:
+          - "$(BUILT_PRODUCTS_DIR)/CrumbAgent"
+        outputFiles:
+          - "$(TARGET_BUILD_DIR)/$(FULL_PRODUCT_NAME)/Contents/MacOS/CrumbAgent"
+        script: |
+          mkdir -p "${TARGET_BUILD_DIR}/${FULL_PRODUCT_NAME}/Contents/MacOS"
+          cp -f "${BUILT_PRODUCTS_DIR}/CrumbAgent" "${TARGET_BUILD_DIR}/${FULL_PRODUCT_NAME}/Contents/MacOS/CrumbAgent"
     info:
       path: Crumb/Info.plist
       properties:
@@ -29,6 +39,18 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: nl.tiendo.crumb
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.utilities
+  CrumbAgent:
+    type: tool
+    platform: macOS
+    sources:
+      - Agent
+      - Core
+    dependencies:
+      - sdk: libsqlite3.tbd
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: nl.tiendo.crumb.agent
+        PRODUCT_NAME: CrumbAgent
   CrumbTests:
     type: bundle.unit-test
     platform: macOS
@@ -44,6 +66,7 @@ schemes:
     build:
       targets:
         Crumb: all
+        CrumbAgent: [build]
         CrumbTests: [test]
     run:
       config: Debug

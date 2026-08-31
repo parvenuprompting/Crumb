@@ -11,8 +11,10 @@ struct FirefoxSource: CookieSource {
 
     var isInstalled: Bool { fileManager.fileExists(atPath: profilesRootURL.path) }
 
-    private var cookieStoreURLs: [URL] {
-        guard let entries = try? fileManager.contentsOfDirectory(
+    static func cookieStoreURLs() -> [URL] {
+        let profilesRootURL = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support/Firefox/Profiles")
+        guard let entries = try? FileManager.default.contentsOfDirectory(
             at: profilesRootURL,
             includingPropertiesForKeys: [.isDirectoryKey]
         ) else { return [] }
@@ -21,9 +23,11 @@ struct FirefoxSource: CookieSource {
             .filter { $0.resolvingSymlinksInPath().hasDirectoryPath }
             .compactMap { profileDir -> URL? in
                 let store = profileDir.appendingPathComponent("cookies.sqlite")
-                return fileManager.fileExists(atPath: store.path) ? store : nil
+                return FileManager.default.fileExists(atPath: store.path) ? store : nil
             }
     }
+
+    private var cookieStoreURLs: [URL] { Self.cookieStoreURLs() }
 
     func scan() throws -> [RawCookie] {
         var cookies: [RawCookie] = []

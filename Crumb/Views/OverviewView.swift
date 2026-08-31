@@ -91,6 +91,22 @@ struct OverviewView: View {
             }
 
             if let run {
+                if let used = run.aiUsed, used {
+                    Text("AI-classificatie actief — \(run.aiClassifiedCount ?? 0) twijfelgevallen beoordeeld door het lokale model.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else if let reason = run.aiSkippedReason {
+                    Text(reason)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("AI-classificatie uit — adviezen komen alleen uit de regellaag.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            if let run {
                 SectionHeader(title: "Bronnen")
                 ForEach(run.sources, id: \.browser) { source in
                     StatRow(

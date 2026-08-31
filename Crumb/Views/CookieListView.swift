@@ -6,6 +6,10 @@ struct CookieListView: View {
     @State private var browserFilter = "Alle"
     @State private var categoryFilter = "Alle"
     @State private var verdictFilter = "Alle"
+    @State private var selection = Set<String>()
+    @State private var showDeleteConfirmation = false
+    @State private var deleteResults: [DeletionResult]?
+    @State private var isDeleting = false
 
     private var records: [CookieRecord] {
         scanService.lastRun?.records ?? []
@@ -37,8 +41,7 @@ struct CookieListView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 10) {
-                Picker("", selection: $browserFilter) {
+            HStack(spacing: 10) {                Picker("", selection: $browserFilter) {
                     Text("Alle").tag("Alle")
                     ForEach(availableBrowsers, id: \.self) { Text($0).tag($0) }
                 }
@@ -68,6 +71,12 @@ struct CookieListView: View {
                     .font(.caption)
                     .monospacedDigit()
                     .foregroundStyle(.secondary)
+
+                Button("Verwijderen…") {
+                    showDeleteConfirmation = true
+                }
+                .disabled(selection.isEmpty)
+                .controlSize(.small)
             }
 
             if filtered.isEmpty {
@@ -78,13 +87,141 @@ struct CookieListView: View {
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
             } else {
-                List(filtered) { record in
-                    CookieRow(record: record)
+                List(selection: $selection) {
+                    ForEach(filtered) { record in
+                        CookieRow(record: record)
+                            .tag(record.id)
+                    }
                 }
                 .listStyle(.inset(alternatesRowBackgrounds: true))
             }
         }
         .searchable(text: $searchText, placement: .toolbar, prompt: "Zoek op domein of naam")
+        .sheet(isPresented: $showDeleteConfirmation) {
+            DeleteConfirmationSheet(
+                records: filtered.filter { selection.contains($0.id) },
+                results: deleteResults,
+                isDeleting: isDeleting,
+                onConfirm: { deleteSelected() },
+                onCancel: {
+                    showDeleteConfirmation = false
+                    deleteResults = nil
+                }
+            )
+        }
+    }
+
+    private func deleteSelected() {
+        let targets = filtered.filter { selection.contains($0.id) }
+        isDeleting = true
+        Task { @MainActor in
+            let results = await DeletionEngine.delete(targets)
+            let entries: [AuditEntry] = results.map { result in
+                AuditEntry(
+                    timestamp: Date(),
+                    mode: "manual",
+                    browser: result.record.browser,
+                    domain: result.record.domain,
+                    name: result.record.name,
+                    path: result.record.path,
+                    category: result.record.category.rawValue,
+                    verdict: result.record.verdict.rawValue,
+                    reasoning: result.record.reasoning,
+                    result: result.success ? "deleted" : "failed",
+                    detail: result.detail
+                )
+            }
+            try? AuditLog.append(entries)
+            isDeleting = false
+            deleteResults = results
+            await scanService.runScan()
+            selection.removeAll()
+        }
+    }
+}
+
+struct DeleteConfirmationSheet: View {
+    let records: [CookieRecord]
+    let results: [DeletionResult]?
+    let isDeleting: Bool
+    let onConfirm: () -> Void
+    let onCancel: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text(results == nil ? "Stap 1 — bevestig je selectie" : "Stap 2 — resultaat")
+                .font(.headline)
+
+            if let results {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 8) {
+                        ForEach(results, id: \.record.id) { result in
+                            VStack(alignment: .leading, spacing: 2) {
+                                HStack {
+                                    Text("\(result.record.name) · \(result.record.domain)")
+                                        .font(.callout.weight(.medium))
+                                    Spacer()
+                                    Text(result.success ? "VERWIJDERD" : "GEFAALD")
+                                        .font(.caption2.weight(.semibold))
+                                }
+                                Text(result.detail)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .padding(.vertical, 2)
+                            Divider().opacity(0.4)
+                        }
+                    }
+                }
+                .frame(maxHeight: 260)
+
+                HStack {
+                    Spacer()
+                    Button("Sluiten") { onCancel() }
+                }
+            } else {
+                Text("\(records.count) cookie(s) geselecteerd. Safelist-cookies worden geweigerd; browsers moeten gesloten zijn.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 8) {
+                        ForEach(records) { record in
+                            VStack(alignment: .leading, spacing: 2) {
+                                HStack {
+                                    Text("\(record.name) · \(record.domain)")
+                                        .font(.callout.weight(.medium))
+                                    Spacer()
+                                    Text(DeletionEngine.canDelete(record).allowed ? "" : "GEBLOKKEERD")
+                                        .font(.caption2.weight(.semibold))
+                                }
+                                Text(record.reasoning)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .padding(.vertical, 2)
+                            Divider().opacity(0.4)
+                        }
+                    }
+                }
+                .frame(maxHeight: 260)
+
+                HStack {
+                    Button("Annuleren") { onCancel() }
+                    Spacer()
+                    if isDeleting {
+                        ProgressView()
+                            .controlSize(.small)
+                    }
+                    Button("Definitief verwijderen") {
+                        onConfirm()
+                    }
+                    .disabled(records.isEmpty || isDeleting || records.contains { !DeletionEngine.canDelete($0).allowed })
+                }
+            }
+        }
+        .padding(20)
+        .frame(width: 520)
     }
 }
 
