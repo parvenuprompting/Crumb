@@ -63,11 +63,12 @@ struct QuickCleanCardView: View {
                 }
                 .font(.callout.weight(.semibold))
                 .frame(maxWidth: .infinity)
-                .foregroundStyle(count > 0 ? AnyShapeStyle(.background) : AnyShapeStyle(.secondary))
+                // Zwarte label; bij count == 0 geen .disabled, want SwiftUI
+                // dimt disabled-labels weer naar grijs.
+                .foregroundStyle(count > 0 ? AnyShapeStyle(.background) : AnyShapeStyle(.primary))
             }
             .buttonStyle(.borderedProminent)
-            .tint(count > 0 ? Color.primary : Color.secondary.opacity(0.3))
-            .disabled(count == 0)
+            .tint(count > 0 ? Color.primary : Color.primary.opacity(0.08))
             .controlSize(.regular)
         }
         .padding(16)

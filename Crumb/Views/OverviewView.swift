@@ -87,6 +87,9 @@ struct OverviewView: View {
                         preset: preset,
                         count: candidates.count,
                         onAction: {
+                            // "Alles schoon" (count == 0) doet niets; de knop
+                            // is bewust niet disabled zodat de zwarte label leesbaar blijft.
+                            guard !candidates.isEmpty else { return }
                             selectedPreset = preset
                             targetsForDeletion = candidates
                             deleteResults = nil
