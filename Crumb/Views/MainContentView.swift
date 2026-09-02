@@ -7,16 +7,24 @@ struct MainContentView: View {
     var body: some View {
         TabView(selection: $selectedTab) {
             OverviewView()
-                .tabItem { Text("Overzicht") }
+                .tabItem {
+                    Label("Home", systemImage: "house")
+                }
                 .tag(0)
             CookieListView()
-                .tabItem { Text("Cookies") }
+                .tabItem {
+                    Label("Cookies", systemImage: "circle.grid.2x2")
+                }
                 .tag(1)
             TrendsView()
-                .tabItem { Text("Trends") }
+                .tabItem {
+                    Label("Trends", systemImage: "chart.line.uptrend.xyaxis")
+                }
                 .tag(2)
             SettingsView()
-                .tabItem { Text("Instellingen") }
+                .tabItem {
+                    Label("Instellingen", systemImage: "gearshape")
+                }
                 .tag(3)
         }
         .padding()

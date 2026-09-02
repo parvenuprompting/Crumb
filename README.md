@@ -33,12 +33,12 @@ Crumb.app (SwiftUI, Dock + menu bar, non-sandboxed)
 │   ├── Categorization/   RuleEngine + gebundelde tracker-domeinenlijst
 │   ├── Safety/           SafelistEngine — hard-block vóór alles
 │   ├── LLM/              OllamaClient — batched, async, met nette fallback
-│   ├── Cleanup/          DeletionEngine + AutoCleanEngine + AuditLog
+│   ├── Cleanup/          DeletionEngine + AutoCleanEngine + QuickCleanEngine + AuditLog
 │   ├── Scheduling/       LaunchAgentManager (RunAtLoad + 3-uurlijkse StartInterval)
 │   ├── Logging/          JSONRunLog per run
 │   └── Model/            CookieRecord, ScanRun, SnapshotStore
 ├── Crumb/
-│   ├── Views/            Overzicht / Cookies / Trends / Instellingen (monochroom)
+│   ├── Views/            Home (Snelkeuzes) / Cookies / Trends / Instellingen (monochroom)
 │   └── Resources/        AppIcon.icns + tracker-domeinenlijst
 └── CrumbAgent            CLI-binary in de app-bundle voor de launchd-agent
 ```
@@ -74,6 +74,17 @@ rm -rf build/
 2. Safari vereist **Volledige Schijftoegang**: Systeeminstellingen → Privacy & Beveiliging → Volledige Schijftoegang → voeg Crumb toe → herstart Crumb. De app linkt hier naartoe in het Overzicht.
 3. Voor AI-classificatie: installeer [Ollama](https://ollama.com) en trek een model, bijvoorbeeld `ollama pull llama3.1:8b`. Zonder Ollama draait alles op de regel-laag; het rapport vermeldt dan expliciet dat AI is overgeslagen.
 
+## Snelkeuzes (1-klik opschonen)
+
+Op de vernieuwde **Home**-pagina biedt Crumb 4 interactieve snelkeuzes waarmee specifieke cookie-groepen in 1 klik veilig opgeruimd kunnen worden:
+
+1. **Tracking & Marketing**: verwijdert direct alle advertentie- en tracker-cookies.
+2. **Oude Analytics (> 30d)**: ruimt analysecookies op die al meer dan een maand niet ververst zijn.
+3. **Alles Opschoonbaar**: verwijdert alle cookies die unaniem als `safeToClean` zijn beoordeeld.
+4. **Onbekende Third-Party**: ruimt niet-essentiële overige cookies op zonder actieve authenticatie.
+
+Elke snelkeuze toont een live teller, vraagt expliciete bevestiging via een preview-sheet, controleert of actieve browsers gesloten zijn, en logt elke actie naar `audit.jsonl`.
+
 ## Veiligheidslaag
 
 - **Auth-patronen** (`session`, `token`, `sid`, `__Secure-`, `__Host-`, …) → altijd vergrendeld.
@@ -105,3 +116,5 @@ Het script bouwt Release, tekent met hardened runtime (inclusief de embedded `Cr
 - [x] Fase 6 — LaunchAgent (RunAtLoad + elke 3 uur)
 - [x] Fase 7 — Handmatige verwijdering + opt-in auto-clean + audit-log
 - [x] Fase 8 — Developer ID-signing + notarization (`scripts/build-release.sh`)
+- [x] Fase 9 — Homepage met interactieve snelkeuzes voor 1-klik opschonen
+

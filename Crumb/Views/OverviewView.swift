@@ -3,17 +3,42 @@ import SwiftUI
 struct OverviewView: View {
     @EnvironmentObject private var scanService: ScanService
 
+    @State private var selectedPreset: QuickCleanPreset?
+    @State private var targetsForDeletion: [CookieRecord] = []
+    @State private var showDeleteConfirmation = false
+    @State private var deleteResults: [DeletionResult]?
+    @State private var isDeleting = false
+
     private var run: ScanRun? { scanService.lastRun }
+
+    private let columns = [
+        GridItem(.flexible(), spacing: 14),
+        GridItem(.flexible(), spacing: 14)
+    ]
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
+            VStack(alignment: .leading, spacing: 22) {
                 accessSection
                 headerSection
+
                 if let run {
-                    categorySection(run)
-                    verdictSection(run)
-                    browserSection(run)
+                    quickCleanSection(run)
+
+                    Divider().opacity(0.3)
+
+                    HStack(alignment: .top, spacing: 24) {
+                        VStack(alignment: .leading, spacing: 16) {
+                            categorySection(run)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                        VStack(alignment: .leading, spacing: 16) {
+                            verdictSection(run)
+                            browserSection(run)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
                 } else {
                     Text(scanService.isScanning
                          ? "Eerste scan loopt…"
@@ -24,6 +49,63 @@ struct OverviewView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 4)
+            .padding(.bottom, 16)
+        }
+        .sheet(isPresented: $showDeleteConfirmation) {
+            DeleteConfirmationSheet(
+                records: targetsForDeletion,
+                results: deleteResults,
+                isDeleting: isDeleting,
+                onConfirm: { executeQuickClean() },
+                onCancel: {
+                    showDeleteConfirmation = false
+                    deleteResults = nil
+                    selectedPreset = nil
+                    targetsForDeletion = []
+                }
+            )
+        }
+    }
+
+    private func quickCleanSection(_ run: ScanRun) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                SectionHeader(title: "Snelkeuzes — 1-klik opschonen")
+                Spacer()
+                let totalSafe = run.verdictCounts[.safeToClean, default: 0]
+                if totalSafe > 0 {
+                    Text("\(totalSafe) cookies direct veilig te verwijderen")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            LazyVGrid(columns: columns, spacing: 14) {
+                ForEach(QuickCleanPreset.allCases) { preset in
+                    let candidates = QuickCleanEngine.candidates(for: preset, in: run)
+                    QuickCleanCardView(
+                        preset: preset,
+                        count: candidates.count,
+                        onAction: {
+                            selectedPreset = preset
+                            targetsForDeletion = candidates
+                            deleteResults = nil
+                            showDeleteConfirmation = true
+                        }
+                    )
+                }
+            }
+        }
+    }
+
+    private func executeQuickClean() {
+        guard let preset = selectedPreset, !targetsForDeletion.isEmpty else { return }
+        isDeleting = true
+        Task { @MainActor in
+            let results = await QuickCleanEngine.delete(records: targetsForDeletion, preset: preset)
+            isDeleting = false
+            deleteResults = results
+            await scanService.runScan()
         }
     }
 
@@ -105,18 +187,6 @@ struct OverviewView: View {
                         .foregroundStyle(.secondary)
                 }
             }
-
-            if let run {
-                SectionHeader(title: "Bronnen")
-                ForEach(run.sources, id: \.browser) { source in
-                    StatRow(
-                        title: source.browser,
-                        value: source.scanned
-                            ? "\(source.cookieCount) cookies"
-                            : (source.error ?? "niet aanwezig")
-                    )
-                }
-            }
         }
     }
 
@@ -151,9 +221,14 @@ struct OverviewView: View {
 
     private func browserSection(_ run: ScanRun) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            SectionHeader(title: "Per browser")
-            ForEach(run.browserCounts.sorted(by: { $0.key < $1.key }), id: \.key) { entry in
-                StatRow(title: entry.key, value: "\(entry.value)")
+            SectionHeader(title: "Bronnen")
+            ForEach(run.sources, id: \.browser) { source in
+                StatRow(
+                    title: source.browser,
+                    value: source.scanned
+                        ? "\(source.cookieCount) cookies"
+                        : (source.error ?? "niet aanwezig")
+                )
             }
         }
     }
