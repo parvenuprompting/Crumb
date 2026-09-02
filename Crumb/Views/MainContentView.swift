@@ -3,6 +3,7 @@ import SwiftUI
 struct MainContentView: View {
     @EnvironmentObject private var scanService: ScanService
     @State private var selectedTab = 0
+    @State private var showOnboarding = !UserDefaults.standard.bool(forKey: "onboardingCompleted")
 
     var body: some View {
         TabView(selection: $selectedTab) {
@@ -28,6 +29,9 @@ struct MainContentView: View {
                 .tag(3)
         }
         .padding()
+        .sheet(isPresented: $showOnboarding) {
+            OnboardingView()
+        }
     }
 }
 

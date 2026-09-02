@@ -71,6 +71,7 @@ struct WhitelistStore: Codable, Sendable {
 
 struct SafelistEngine: Sendable {
     let whitelist: Set<String>
+    var protectedCookies: Set<String> = []
 
     static let authExactTokens: Set<String> = [
         "session", "sess", "sid", "ssid", "auth", "token", "csrf", "xsrf", "jwt",
@@ -86,12 +87,16 @@ struct SafelistEngine: Sendable {
     func evaluate(
         domain: String,
         name: String,
+        path: String = "/",
         isSecure: Bool,
         isHttpOnly: Bool,
         isSessionOnly: Bool,
         creation: Date?,
         now: Date = Date()
     ) -> CookieProtection {
+        if protectedCookies.contains(ProtectedCookieStore.key(domain: domain, name: name, path: path)) {
+            return .locked("Handmatig beschermd door de gebruiker — nooit wissen.")
+        }
         if let reason = whitelistReason(domain: domain) {
             return .locked(reason)
         }

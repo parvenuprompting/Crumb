@@ -14,9 +14,45 @@ enum Mono {
     }
 }
 
+extension CookieVerdict {
+    /// Subtiele semantische accenten — het ontwerp blijft monochroom, kleur
+    /// draagt alleen betekenis en komt altijd naast een icoon/label.
+    var semanticColor: Color {
+        switch self {
+        case .safeToClean: return Color(red: 0.18, green: 0.52, blue: 0.28)
+        case .reviewSuggested: return Color(red: 0.78, green: 0.48, blue: 0.08)
+        case .keep: return .secondary
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .safeToClean: return "checkmark.circle"
+        case .reviewSuggested: return "exclamationmark.circle"
+        case .keep: return "circle"
+        }
+    }
+}
+
+extension CookieProtection {
+    var shortLabel: String {
+        switch self {
+        case .locked: return "BESCHERMD"
+        case .reviewOnly: return "REVIEW"
+        case .none: return ""
+        }
+    }
+}
+
 extension Date {
     var runTimestamp: String {
         formatted(date: .abbreviated, time: .shortened)
+    }
+
+    var ageDescription: String {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .abbreviated
+        return formatter.localizedString(for: self, relativeTo: Date())
     }
 }
 

@@ -37,8 +37,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil else { return }
         NSApp.activate(ignoringOtherApps: true)
         ScanService.shared.loadLastRunFromDisk()
-        Task { @MainActor in
-            await ScanService.shared.runScan()
+        // Bij de eerste start start de scan pas ná de onboarding.
+        if UserDefaults.standard.bool(forKey: "onboardingCompleted") {
+            Task { @MainActor in
+                await ScanService.shared.runScan()
+            }
         }
     }
 

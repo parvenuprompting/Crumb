@@ -1,10 +1,39 @@
 import Foundation
 
+/// Fases van een scan, in volgorde — voor de voortgangsweergave.
+enum ScanPhase: String, CaseIterable, Sendable {
+    case idle
+    case detectingBrowsers
+    case readingStores
+    case applyingRules
+    case aiClassification
+    case checkingSafelist
+    case savingReport
+
+    var displayName: String {
+        switch self {
+        case .idle: return "Niet actief"
+        case .detectingBrowsers: return "Browsers detecteren"
+        case .readingStores: return "Cookie-stores lezen"
+        case .applyingRules: return "Regels toepassen"
+        case .aiClassification: return "AI-classificatie uitvoeren"
+        case .checkingSafelist: return "Safelist controleren"
+        case .savingReport: return "Rapport opslaan"
+        }
+    }
+
+    var stepNumber: Int? {
+        Self.allCases.firstIndex(of: self).map { $0 + 1 }
+    }
+}
+
 @MainActor
 final class ScanService: ObservableObject {
     static let shared = ScanService()
 
     @Published private(set) var isScanning = false
+    @Published private(set) var phase: ScanPhase = .idle
+    @Published private(set) var liveSourceStatuses: [ScanSourceStatus] = []
     @Published private(set) var lastRun: ScanRun?
     @Published private(set) var lastError: String?
 
@@ -55,10 +84,13 @@ final class ScanService: ObservableObject {
         guard !isScanning else { return }
         isScanning = true
         lastError = nil
-        defer { isScanning = false }
+        liveSourceStatuses = []
+        phase = .detectingBrowsers
+        defer { isScanning = false; phase = .idle }
 
         let settings = SettingsStore.shared
         let whitelist = Set(WhitelistStore.load().domains.map(WhitelistStore.normalizedDomain))
+        let protectedCookies = Set(ProtectedCookieStore.load().keys)
         let ollamaEnabled = settings.ollamaEnabled
         let ollamaModel = settings.ollamaModel
 
@@ -68,14 +100,21 @@ final class ScanService: ObservableObject {
         }
 
         let startedAt = Date()
+        phase = .readingStores
         let sources = Self.buildSources()
-        var (statuses, rawCookies) = await Self.scanSources(sources)
+        let (statuses, cookies) = await Self.scanSources(sources) { status in
+            Task { @MainActor in
+                ScanService.shared.liveSourceStatuses.append(status)
+            }
+        }
+        var rawCookies = cookies
 
         var aiUsed = false
         var aiSkippedReason: String?
         var aiClassified = 0
 
         if ollamaEnabled {
+            phase = .aiClassification
             let result = await Self.classifyWithAI(
                 rawCookies: rawCookies,
                 trackerList: trackerList,
@@ -88,12 +127,15 @@ final class ScanService: ObservableObject {
             aiSkippedReason = result.skippedReason
         }
 
+        phase = .applyingRules
         let records = await Self.buildRecords(
             rawCookies: rawCookies,
             whitelist: whitelist,
             trackerList: trackerList,
-            now: startedAt
+            now: startedAt,
+            protectedCookies: protectedCookies
         )
+        phase = .checkingSafelist
 
         let finishedAt = Date()
         let run = ScanRun(
@@ -108,6 +150,7 @@ final class ScanService: ObservableObject {
         )
         lastRun = run
 
+        phase = .savingReport
         do {
             try await Self.persist(run: run)
         } catch {
@@ -121,14 +164,19 @@ final class ScanService: ObservableObject {
 
     nonisolated static let retentionInterval: TimeInterval = 90 * 24 * 60 * 60
 
-    nonisolated static func scanSources(_ sources: [any CookieSource]) async -> (statuses: [ScanSourceStatus], cookies: [RawCookie]) {
+    nonisolated static func scanSources(
+        _ sources: [any CookieSource],
+        onSourceDone: (@Sendable (ScanSourceStatus) -> Void)? = nil
+    ) async -> (statuses: [ScanSourceStatus], cookies: [RawCookie]) {
         var statuses: [ScanSourceStatus] = []
         var allCookies: [RawCookie] = []
         allCookies.reserveCapacity(2000)
 
         for source in sources {
             guard source.isInstalled else {
-                statuses.append(ScanSourceStatus(browser: source.browserName, scanned: false, cookieCount: 0, error: nil, requiresFullDiskAccess: false))
+                let status = ScanSourceStatus(browser: source.browserName, scanned: false, cookieCount: 0, error: nil, requiresFullDiskAccess: false)
+                statuses.append(status)
+                onSourceDone?(status)
                 continue
             }
             do {
@@ -138,11 +186,17 @@ final class ScanService: ObservableObject {
                     return tagged
                 }
                 allCookies.append(contentsOf: cookies)
-                statuses.append(ScanSourceStatus(browser: source.browserName, scanned: true, cookieCount: cookies.count, error: nil, requiresFullDiskAccess: false))
+                let status = ScanSourceStatus(browser: source.browserName, scanned: true, cookieCount: cookies.count, error: nil, requiresFullDiskAccess: false)
+                statuses.append(status)
+                onSourceDone?(status)
             } catch CookieScanError.fullDiskAccessRequired {
-                statuses.append(ScanSourceStatus(browser: source.browserName, scanned: false, cookieCount: 0, error: "Volledige Schijftoegang vereist", requiresFullDiskAccess: true))
+                let status = ScanSourceStatus(browser: source.browserName, scanned: false, cookieCount: 0, error: "Volledige Schijftoegang vereist", requiresFullDiskAccess: true)
+                statuses.append(status)
+                onSourceDone?(status)
             } catch {
-                statuses.append(ScanSourceStatus(browser: source.browserName, scanned: false, cookieCount: 0, error: error.localizedDescription, requiresFullDiskAccess: false))
+                let status = ScanSourceStatus(browser: source.browserName, scanned: false, cookieCount: 0, error: error.localizedDescription, requiresFullDiskAccess: false)
+                statuses.append(status)
+                onSourceDone?(status)
             }
         }
         return (statuses, allCookies)
@@ -222,9 +276,10 @@ final class ScanService: ObservableObject {
         rawCookies: [RawCookie],
         whitelist: Set<String>,
         trackerList: TrackerList,
-        now: Date
+        now: Date,
+        protectedCookies: Set<String> = []
     ) async -> [CookieRecord] {
-        let safelist = SafelistEngine(whitelist: whitelist)
+        let safelist = SafelistEngine(whitelist: whitelist, protectedCookies: protectedCookies)
         let engine = RuleEngine(trackerList: trackerList, now: now)
         var snapshot = SnapshotStore.load()
         var records: [CookieRecord] = []
@@ -236,6 +291,7 @@ final class ScanService: ObservableObject {
             let protection = safelist.evaluate(
                 domain: raw.domain,
                 name: raw.name,
+                path: raw.path,
                 isSecure: raw.isSecure,
                 isHttpOnly: raw.isHttpOnly,
                 isSessionOnly: raw.isSessionOnly,
