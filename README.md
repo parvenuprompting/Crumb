@@ -33,7 +33,7 @@ Crumb.app (SwiftUI, Dock + menu bar, non-sandboxed)
 │   ├── Categorization/   RuleEngine + gebundelde tracker-domeinenlijst
 │   ├── Safety/           SafelistEngine — hard-block vóór alles
 │   ├── LLM/              OllamaClient — batched, async, met nette fallback
-│   ├── Cleanup/          DeletionEngine + AutoCleanEngine + QuickCleanEngine + AuditLog
+│   ├── Cleanup/          DeletionEngine + AutoCleanEngine + QuickCleanEngine + CookieBackup + AuditLog
 │   ├── Scheduling/       LaunchAgentManager (RunAtLoad + 3-uurlijkse StartInterval)
 │   ├── Logging/          JSONRunLog per run
 │   └── Model/            CookieRecord, ScanRun, SnapshotStore
@@ -88,13 +88,22 @@ Elke snelkeuze toont een live teller, vraagt expliciete bevestiging via een prev
 ## Veiligheidslaag
 
 - **Auth-patronen** (`session`, `token`, `sid`, `__Secure-`, `__Host-`, …) → altijd vergrendeld.
-- **Gebruikerswhitelist** (bank, werk-SSO, e-mail) → altijd vergrendeld, los van elk advies.
-- **Recente actieve sessies** (secure + httpOnly + jonger dan 24 uur) → maximaal `reviewSuggested`.
-- **Auto-clean** is opt-in per categorie (aanbevolen: alleen marketing/tracking, ouder dan X dagen, unanieme goedkeuring) en schrijft een audit-logregel per verwijdering.
+- **Gebruikerswhitelist** (bank, werk-SSO, e-mail) → altijd vergrendeld, los van elk advies. Invoer zoals `https://bank.nl/login` of `WWW.Bank.nl` wordt automatisch genormaliseerd naar `bank.nl`; import/export via Instellingen.
+- **Recente actieve sessies** (secure + httpOnly + jonger dan 24 uur) → maximaal `reviewSuggested` en nooit in bulk-voorselekten (snelkeuzes en auto-clean nemen deze cookies nooit mee).
+- **Back-up vóór verwijdering.** Elke verwijderingsactie schrijft eerst de volledige rijen weg naar een lokaal back-upbestand (alleen-lezen voor de eigenaar). Lukt de back-up niet, dan wordt er niet verwijderd. Herstellen kan via Instellingen → Back-ups (browser moet gesloten zijn).
+- **Auto-clean** is opt-in per categorie (aanbevolen: alleen marketing/tracking, ouder dan X dagen, unanieme goedkeuring) en schrijft een audit-logregel per verwijdering. De achtergrond-agent toont daarna een macOS-notificatie met het aantal opgeruimde cookies.
+
+## Tracker-lijst
+
+De gebundelde lijst (`tracker-domains.txt`, ±50.000 domeinen) combineert handmatige entries met domeinen uit [EasyPrivacy](https://easylist.to/easylist/easyprivacy.txt). Bekende infrastructuur-/SSO-domeinen (Google, Apple, Microsoft, Okta, sociale platformen, …) worden nooit als tracker opgenomen. Bijwerken:
+
+```bash
+./scripts/update-tracker-list.sh
+```
 
 ## Logs
 
-Elke run schrijft een JSON-rapport naar `~/Library/Application Support/Crumb/logs/`. Verwijderingen worden gelogd in `audit.jsonl` (wat, wanneer, welke regel/LLM-uitspraak). Opruimen van oude logs is een expliciete handmatige actie in Instellingen.
+Elke run schrijft een JSON-rapport naar `~/Library/Application Support/Crumb/logs/`. Verwijderingen worden gelogd in `audit.jsonl` (wat, wanneer, welke regel/LLM-uitspraak). Rapporten en back-ups worden automatisch opgeruimd na 90 dagen; handmatig opruimen kan nog steeds via Instellingen.
 
 ## Distributie (Developer ID + notarization)
 
@@ -116,5 +125,6 @@ Het script bouwt Release, tekent met hardened runtime (inclusief de embedded `Cr
 - [x] Fase 6 — LaunchAgent (RunAtLoad + elke 3 uur)
 - [x] Fase 7 — Handmatige verwijdering + opt-in auto-clean + audit-log
 - [x] Fase 8 — Developer ID-signing + notarization (`scripts/build-release.sh`)
+- [x] Fase 9 — Verharding & beheer: dubbele goedkeuring afgedwongen, back-ups + herstellen, Safari-parser (canoniek binarycookies-formaat), trackerlijst via EasyPrivacy, whitelist-normalisatie, churn-detectie, log-/back-uprotatie, agent-notificaties, per-cookie acties, CI-releaseverificatie
 - [x] Fase 9 — Homepage met interactieve snelkeuzes voor 1-klik opschonen
 

@@ -98,10 +98,13 @@ struct MenuPanelView: View {
             .disabled(scanService.isScanning)
             .frame(maxWidth: .infinity)
 
-            Button("Stop") {
+            Button("Afsluiten") {
                 NSApp.terminate(nil)
             }
             .frame(maxWidth: .infinity)
+            Text("De achtergrond-agent blijft actief.")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
         }
         .padding(12)
         .frame(width: 260)

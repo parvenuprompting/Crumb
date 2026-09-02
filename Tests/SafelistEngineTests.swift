@@ -188,4 +188,45 @@ final class WhitelistModelTests: XCTestCase {
         XCTAssertNotNil(model.add("www.bank.nl"))
         XCTAssertEqual(model.domains, ["bank.nl"])
     }
+
+    func testExportImportRoundtrip() throws {
+        let model = WhitelistModel()
+        XCTAssertNil(model.add("bank.nl"))
+        XCTAssertNil(model.add("ing.nl"))
+
+        let file = FileManager.default.temporaryDirectory
+            .appendingPathComponent("crumb-tests-whitelist-export-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: file) }
+
+        try model.export(to: file)
+
+        // Nieuwe model-instansie tegen hetzelfde (tijdelijke) bestand.
+        let other = WhitelistModel()
+        other.remove("bank.nl")
+        other.remove("ing.nl")
+        XCTAssertTrue(other.domains.isEmpty)
+
+        let added = try other.importDomains(from: file)
+        XCTAssertEqual(added, 2)
+        XCTAssertEqual(other.domains.sorted(), ["bank.nl", "ing.nl"])
+
+        // Opnieuw importeren voegt niets toe (dedupe).
+        XCTAssertEqual(try other.importDomains(from: file), 0)
+    }
+
+    func testImportNormalizesAndSkipsInvalid() throws {
+        let file = FileManager.default.temporaryDirectory
+            .appendingPathComponent("crumb-tests-whitelist-import-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: file) }
+
+        let payload = WhitelistStore(domains: ["https://bank.nl/login", "WWW.ING.NL", "geendomein", "bank.nl"])
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        try encoder.encode(payload).write(to: file)
+
+        let model = WhitelistModel()
+        let added = try model.importDomains(from: file)
+        XCTAssertEqual(added, 2)
+        XCTAssertEqual(model.domains.sorted(), ["bank.nl", "ing.nl"])
+    }
 }

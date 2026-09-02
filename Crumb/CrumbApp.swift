@@ -92,4 +92,32 @@ final class WhitelistModel: ObservableObject {
         try? store.save()
         reload()
     }
+
+    func export(to url: URL) throws {
+        let store = WhitelistStore(domains: domains)
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        try encoder.encode(store).write(to: url, options: .atomic)
+    }
+
+    /// Importeert domeinen (normaliseert en dedupliceert); geeft het aantal
+    /// toegevoegde domeinen terug.
+    @discardableResult
+    func importDomains(from url: URL) throws -> Int {
+        let data = try Data(contentsOf: url)
+        let imported = try JSONDecoder().decode(WhitelistStore.self, from: data)
+        var store = WhitelistStore.load()
+        var added = 0
+        for raw in imported.domains {
+            let domain = WhitelistStore.normalizedDomain(raw)
+            guard WhitelistStore.isValidWhitelistDomain(domain) else { continue }
+            if !store.domains.contains(domain) {
+                store.domains.append(domain)
+                added += 1
+            }
+        }
+        try store.save()
+        reload()
+        return added
+    }
 }

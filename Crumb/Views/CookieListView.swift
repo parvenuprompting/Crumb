@@ -1,5 +1,13 @@
 import SwiftUI
 
+enum CookieSortMode: String, CaseIterable, Identifiable {
+    case domain = "Domein"
+    case category = "Categorie"
+    case firstSeen = "Eerst gezien"
+
+    var id: String { rawValue }
+}
+
 struct CookieListView: View {
     @EnvironmentObject private var scanService: ScanService
     @EnvironmentObject private var whitelist: WhitelistModel
@@ -7,6 +15,8 @@ struct CookieListView: View {
     @State private var browserFilter = "Alle"
     @State private var categoryFilter = "Alle"
     @State private var verdictFilter = "Alle"
+    @State private var protectionFilter = "Alle"
+    @State private var sortMode: CookieSortMode = .domain
     @State private var selection = Set<String>()
     @State private var pendingDeleteTargets: [CookieRecord] = []
     @State private var showDeleteConfirmation = false
@@ -27,6 +37,12 @@ struct CookieListView: View {
             if browserFilter != "Alle", record.browser != browserFilter { return false }
             if categoryFilter != "Alle", record.category.displayName != categoryFilter { return false }
             if verdictFilter != "Alle", record.verdict.displayName != verdictFilter { return false }
+            switch protectionFilter {
+            case "Vergrendeld": if !record.protection.isLocked { return false }
+            case "Review-only": if !record.protection.isReviewOnly { return false }
+            case "Geen bescherming": if record.protection != .none { return false }
+            default: break
+            }
             if !searchText.isEmpty {
                 let query = searchText.lowercased()
                 if !record.domain.lowercased().contains(query),
@@ -37,8 +53,17 @@ struct CookieListView: View {
             return true
         }
         .sorted { a, b in
-            if a.domain != b.domain { return a.domain < b.domain }
-            return a.name < b.name
+            switch sortMode {
+            case .domain:
+                if a.domain != b.domain { return a.domain < b.domain }
+                return a.name < b.name
+            case .category:
+                if a.category != b.category { return a.category.rawValue < b.category.rawValue }
+                if a.domain != b.domain { return a.domain < b.domain }
+                return a.name < b.name
+            case .firstSeen:
+                return a.firstSeen < b.firstSeen
+            }
         }
     }
 
@@ -68,6 +93,23 @@ struct CookieListView: View {
                 }
                 .labelsHidden()
                 .frame(width: 170)
+
+                Picker("", selection: $protectionFilter) {
+                    Text("Alle").tag("Alle")
+                    Text("Vergrendeld").tag("Vergrendeld")
+                    Text("Review-only").tag("Review-only")
+                    Text("Geen bescherming").tag("Geen bescherming")
+                }
+                .labelsHidden()
+                .frame(width: 160)
+
+                Picker("", selection: $sortMode) {
+                    ForEach(CookieSortMode.allCases) { mode in
+                        Text(mode.rawValue).tag(mode)
+                    }
+                }
+                .labelsHidden()
+                .frame(width: 130)
 
                 Spacer()
                 Text("\(filtered.count) van \(records.count)")

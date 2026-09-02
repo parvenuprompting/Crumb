@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct SettingsView: View {
     @EnvironmentObject private var whitelist: WhitelistModel
@@ -56,6 +57,12 @@ struct SettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+
+            HStack {
+                Button("Exporteren…") { exportWhitelist() }
+                Button("Importeren…") { importWhitelist() }
+            }
+            .controlSize(.small)
 
             if whitelist.domains.isEmpty {
                 Text("Nog geen domeinen op de whitelist.")
@@ -288,6 +295,32 @@ struct SettingsView: View {
         } else {
             whitelistNotice = nil
             newDomain = ""
+        }
+    }
+
+    private func exportWhitelist() {
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [UTType.json]
+        panel.nameFieldStringValue = "crumb-whitelist.json"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            try whitelist.export(to: url)
+            whitelistNotice = "Whitelist geëxporteerd naar \(url.lastPathComponent)."
+        } catch {
+            whitelistNotice = "Exporteren mislukt: \(error.localizedDescription)"
+        }
+    }
+
+    private func importWhitelist() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [UTType.json]
+        panel.allowsMultipleSelection = false
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            let added = try whitelist.importDomains(from: url)
+            whitelistNotice = "\(added) domein(en) geïmporteerd."
+        } catch {
+            whitelistNotice = "Importeren mislukt: \(error.localizedDescription)"
         }
     }
 }
