@@ -55,8 +55,10 @@ enum QuickCleanEngine {
         now: Date = Date()
     ) -> [CookieRecord] {
         run.records.filter { record in
-            // Harde safelist blokkade geldt altijd
+            // Harde safelist blokkade geldt altijd; cookies met reviewOnly-
+            // bescherming (mogelijk actieve sessie) nooit in bulk meenemen.
             guard !record.protection.isLocked else { return false }
+            guard !record.protection.isReviewOnly else { return false }
 
             switch preset {
             case .marketingTracking:

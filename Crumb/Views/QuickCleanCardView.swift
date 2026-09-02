@@ -61,10 +61,12 @@ struct QuickCleanCardView: View {
                         Text("Alles schoon")
                     }
                 }
+                .font(.callout.weight(.semibold))
                 .frame(maxWidth: .infinity)
+                .foregroundStyle(count > 0 ? AnyShapeStyle(.background) : AnyShapeStyle(.secondary))
             }
             .buttonStyle(.borderedProminent)
-            .tint(count > 0 ? .primary : Color.secondary.opacity(0.3))
+            .tint(count > 0 ? Color.primary : Color.secondary.opacity(0.3))
             .disabled(count == 0)
             .controlSize(.regular)
         }
@@ -76,7 +78,7 @@ struct QuickCleanCardView: View {
         )
         .overlay(
             RoundedRectangle(cornerRadius: 12)
-                .strokeBorder(Color.primary.opacity(0.12), lineWidth: 1)
+                .strokeBorder(Color.primary.opacity(0.2), lineWidth: 1)
         )
         .clipShape(RoundedRectangle(cornerRadius: 12))
     }

@@ -2,14 +2,17 @@ import SwiftUI
 
 struct CookieListView: View {
     @EnvironmentObject private var scanService: ScanService
+    @EnvironmentObject private var whitelist: WhitelistModel
     @State private var searchText = ""
     @State private var browserFilter = "Alle"
     @State private var categoryFilter = "Alle"
     @State private var verdictFilter = "Alle"
     @State private var selection = Set<String>()
+    @State private var pendingDeleteTargets: [CookieRecord] = []
     @State private var showDeleteConfirmation = false
     @State private var deleteResults: [DeletionResult]?
     @State private var isDeleting = false
+    @State private var whitelistNotice: String?
 
     private var records: [CookieRecord] {
         scanService.lastRun?.records ?? []
@@ -73,10 +76,18 @@ struct CookieListView: View {
                     .foregroundStyle(.secondary)
 
                 Button("Verwijderen…") {
+                    pendingDeleteTargets = filtered.filter { selection.contains($0.id) }
+                    deleteResults = nil
                     showDeleteConfirmation = true
                 }
                 .disabled(selection.isEmpty)
                 .controlSize(.small)
+            }
+
+            if let whitelistNotice {
+                Text(whitelistNotice)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             if filtered.isEmpty {
@@ -91,6 +102,22 @@ struct CookieListView: View {
                     ForEach(filtered) { record in
                         CookieRow(record: record)
                             .tag(record.id)
+                            .contextMenu {
+                                Button("Verwijderen…") {
+                                    pendingDeleteTargets = [record]
+                                    deleteResults = nil
+                                    showDeleteConfirmation = true
+                                }
+                                .disabled(record.protection.isLocked)
+
+                                Button("Voeg '\(record.domain)' toe aan whitelist") {
+                                    if let message = whitelist.add(record.domain) {
+                                        showWhitelistNotice(message)
+                                    } else {
+                                        showWhitelistNotice("'\(record.domain)' staat op de whitelist — beschermd na de volgende scan.")
+                                    }
+                                }
+                            }
                     }
                 }
                 .listStyle(.inset(alternatesRowBackgrounds: true))
@@ -99,10 +126,10 @@ struct CookieListView: View {
         .searchable(text: $searchText, placement: .toolbar, prompt: "Zoek op domein of naam")
         .sheet(isPresented: $showDeleteConfirmation) {
             DeleteConfirmationSheet(
-                records: filtered.filter { selection.contains($0.id) },
+                records: pendingDeleteTargets,
                 results: deleteResults,
                 isDeleting: isDeleting,
-                onConfirm: { deleteSelected() },
+                onConfirm: { deleteTargets(pendingDeleteTargets) },
                 onCancel: {
                     showDeleteConfirmation = false
                     deleteResults = nil
@@ -111,8 +138,16 @@ struct CookieListView: View {
         }
     }
 
-    private func deleteSelected() {
-        let targets = filtered.filter { selection.contains($0.id) }
+    private func showWhitelistNotice(_ message: String) {
+        whitelistNotice = message
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 4_000_000_000)
+            if whitelistNotice == message { whitelistNotice = nil }
+        }
+    }
+
+    private func deleteTargets(_ targets: [CookieRecord]) {
+        guard !targets.isEmpty else { return }
         isDeleting = true
         Task { @MainActor in
             let results = await DeletionEngine.delete(targets)

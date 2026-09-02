@@ -56,6 +56,10 @@ do {
     FileHandle.standardError.write(Data("CrumbAgent: loggen mislukt: \(error)\n".utf8))
 }
 
+// Onderhoud: rapporten en back-ups niet onbeperkt laten groeien.
+try? JSONRunLog.deleteLogs(olderThan: 90 * 24 * 60 * 60)
+try? CookieBackupStore.deleteBackups(olderThan: 90 * 24 * 60 * 60)
+
 let autoCleanSettings = AutoCleanSettings.fromDefaults(defaults)
 let cleaned = await AutoCleanEngine.process(run: run, settings: autoCleanSettings)
 

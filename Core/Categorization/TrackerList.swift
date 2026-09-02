@@ -30,9 +30,16 @@ struct TrackerList: Sendable {
         suffixes = entries
     }
 
+    /// Matcht het domein en elk van zijn suffixen tegen de lijst via O(labels)
+    /// set-lookups — schaalbaar naar lijsten met tienduizenden domeinen.
     func isTracker(domain: String) -> Bool {
-        let normalized = domain.lowercased()
-        if suffixes.contains(normalized) { return true }
-        return suffixes.contains { normalized.hasSuffix(".\($0)") }
+        var label = domain.lowercased()
+        guard !label.isEmpty else { return false }
+        if suffixes.contains(label) { return true }
+        while let firstDot = label.firstIndex(of: ".") {
+            label = String(label[label.index(after: firstDot)...])
+            if suffixes.contains(label) { return true }
+        }
+        return false
     }
 }

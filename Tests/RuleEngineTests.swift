@@ -88,6 +88,16 @@ final class RuleEngineTests: XCTestCase {
         XCTAssertFalse(trackerList.isTracker(domain: "example.com"))
     }
 
+    func testTrackerListDeepSubdomainLabelWalk() {
+        // Regressie voor de label-walk-optimalisatie: diepe subdomeinen matchen,
+        // lookalike-domeinen niet.
+        XCTAssertTrue(trackerList.isTracker(domain: "x.y.z.ads.adnxs.com"))
+        XCTAssertTrue(trackerList.isTracker(domain: "cdn.doubleclick.net"))
+        XCTAssertFalse(trackerList.isTracker(domain: "adnxs.com.evil.io"))
+        XCTAssertFalse(trackerList.isTracker(domain: "com"))
+        XCTAssertFalse(trackerList.isTracker(domain: ""))
+    }
+
     func testAnalyticsNameDetection() {
         XCTAssertTrue(RuleEngine.isAnalyticsName("_ga"))
         XCTAssertTrue(RuleEngine.isAnalyticsName("_ga_XXXXXX"))

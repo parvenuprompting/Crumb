@@ -1,7 +1,7 @@
 import Foundation
 import SQLite3
 
-enum SQLiteValue {
+enum SQLiteValue: Equatable, Sendable {
     case null
     case int(Int64)
     case double(Double)
