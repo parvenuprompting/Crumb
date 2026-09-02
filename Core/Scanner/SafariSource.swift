@@ -1,6 +1,6 @@
 import Foundation
 
-struct ParsedBinaryCookie: Sendable {
+struct ParsedBinaryCookie: Sendable, Equatable {
     var domain: String
     var name: String
     var path: String
@@ -10,66 +10,92 @@ struct ParsedBinaryCookie: Sendable {
     var creation: Date?
 }
 
+/// Parser voor Safari's `Cookies.binarycookies`. Canonieke formaatbeschrijving:
+///
+///   Bestand: "cook" | u32 LE paginatelling | per pagina u32 LE paginagrootte | pagina's sequentieel
+///   Pagina:  u32 LE header (0x00000100) | u32 LE cookie-telling | offsets LE t.o.v. paginastart | entries
+///   Cookie:  u32 LE grootte | u32 LE vlaggen | u32 BE url-offset | u32 BE naam-offset |
+///            u32 BE pad-offset | u32 BE waarde-offset (bewust ongebruikt) |
+///            f64 LE vervaldatum | f64 LE aanmaakdatum | u32 onbekend
+///
+/// Beschadigde pagina's of cookies worden overgeslagen — één corrupte pagina
+/// mag de hele Safari-scan niet platleggen.
 enum BinaryCookiesParser {
     private static let referenceDate = Date(timeIntervalSince1970: 978_307_200)
+    private static let maxPages = 10_000
+    private static let maxCookiesPerPage = 100_000
+    private static let cookieHeaderSize = 44
 
     static func parse(data: Data) throws -> [ParsedBinaryCookie] {
         guard data.count >= 8, data.prefix(4) == Data("cook".utf8) else {
             throw CookieScanError.readFailed("Ongeldig binarycookies-formaat (magic ontbreekt).")
         }
 
-        let pageCount = Self.readUInt32(data, offset: 4)
-        var offset = 8
-        var pageOffsets: [Int] = []
-        for _ in 0..<pageCount {
-            pageOffsets.append(offset)
-            offset += 4
+        let pageCount = Int(readUInt32LE(data, offset: 4))
+        guard pageCount > 0, pageCount <= maxPages, data.count >= 8 + pageCount * 4 else {
+            return []
+        }
+
+        // De paginatabel bevat paginagroottes; pagina's volgen direct op elkaar.
+        var pageSizes: [Int] = []
+        for index in 0..<pageCount {
+            pageSizes.append(Int(readUInt32LE(data, offset: 8 + index * 4)))
         }
 
         var cookies: [ParsedBinaryCookie] = []
-        for pageOffset in pageOffsets {
-            let pageStart = Self.readUInt32(data, offset: pageOffset)
-            cookies.append(contentsOf: try parsePage(data: data, pageStart: Int(pageStart)))
+        var pageStart = 8 + pageCount * 4
+        for size in pageSizes {
+            cookies.append(contentsOf: parsePage(data: data, pageStart: pageStart, pageSize: size))
+            pageStart += size
         }
         return cookies
     }
 
-    private static func parsePage(data: Data, pageStart: Int) throws -> [ParsedBinaryCookie] {
-        guard data.count >= pageStart + 12 else {
-            throw CookieScanError.readFailed("Pagina valt buiten bestand.")
-        }
-        let cookieCount = Int(readUInt32(data, offset: pageStart + 8))
-        var cookieOffsets: [Int] = []
-        var offset = pageStart + 12
-        for _ in 0..<cookieCount {
-            cookieOffsets.append(Int(readUInt32(data, offset: offset)))
-            offset += 4
+    private static func parsePage(data: Data, pageStart: Int, pageSize: Int) -> [ParsedBinaryCookie] {
+        guard pageSize >= 8, pageStart >= 0, data.count >= pageStart + 8 else { return [] }
+        let pageEnd = min(pageStart + pageSize, data.count)
+
+        let cookieCount = Int(readUInt32LE(data, offset: pageStart + 4))
+        guard cookieCount > 0, cookieCount <= maxCookiesPerPage,
+              pageEnd >= pageStart + 8 + cookieCount * 4 else {
+            return []
         }
 
-        return cookieOffsets.compactMap { cookieOffset in
-            parseCookie(data: data, entryStart: pageStart + cookieOffset)
+        var cookies: [ParsedBinaryCookie] = []
+        for index in 0..<cookieCount {
+            let relativeOffset = Int(readUInt32LE(data, offset: pageStart + 8 + index * 4))
+            let cookieStart = pageStart + relativeOffset
+            guard cookieStart >= pageStart, cookieStart < pageEnd else { continue }
+            if let cookie = parseCookie(data: data, entryStart: cookieStart, entryEnd: pageEnd) {
+                cookies.append(cookie)
+            }
         }
+        return cookies
     }
 
-    private static func parseCookie(data: Data, entryStart: Int) -> ParsedBinaryCookie? {
-        guard data.count >= entryStart + 44 else { return nil }
+    private static func parseCookie(data: Data, entryStart: Int, entryEnd: Int) -> ParsedBinaryCookie? {
+        guard entryEnd - entryStart >= cookieHeaderSize else { return nil }
 
-        let flags = readUInt32(data, offset: entryStart + 4)
-        let urlOffset = Int(readUInt32(data, offset: entryStart + 12))
-        let nameOffset = Int(readUInt32(data, offset: entryStart + 16))
-        let pathOffset = Int(readUInt32(data, offset: entryStart + 20))
-        let expiry = readDouble(data, offset: entryStart + 28)
-        let creation = readDouble(data, offset: entryStart + 36)
+        let entrySize = Int(readUInt32LE(data, offset: entryStart))
+        let flags = readUInt32LE(data, offset: entryStart + 4)
+        // URL-, naam- en pad-offsets zijn big-endian in het Safari-formaat.
+        let urlOffset = Int(readUInt32BE(data, offset: entryStart + 8))
+        let nameOffset = Int(readUInt32BE(data, offset: entryStart + 12))
+        let pathOffset = Int(readUInt32BE(data, offset: entryStart + 16))
+        // Waarde-offset (+20) wordt bewust genegeerd: cookie-waarden blijven onaangeroerd.
+        let expiry = readDoubleLE(data, offset: entryStart + 24)
+        let creation = readDoubleLE(data, offset: entryStart + 32)
 
-        guard let url = readString(data, offset: entryStart + urlOffset),
-              let name = readString(data, offset: entryStart + nameOffset),
-              let path = readString(data, offset: entryStart + pathOffset) else {
+        let limit = entrySize > 0 ? min(entryStart + entrySize, entryEnd) : entryEnd
+        guard let url = readNullTerminatedString(data: data, offset: entryStart + urlOffset, limit: limit),
+              let name = readNullTerminatedString(data: data, offset: entryStart + nameOffset, limit: limit),
+              let path = readNullTerminatedString(data: data, offset: entryStart + pathOffset, limit: limit) else {
             return nil
         }
 
         let isSessionOnly = expiry == 0
         return ParsedBinaryCookie(
-            domain: Self.normalizedDomain(url),
+            domain: normalizedDomain(url),
             name: name,
             path: path,
             isSecure: flags & 0x1 != 0,
@@ -83,28 +109,37 @@ enum BinaryCookiesParser {
         url.hasPrefix(".") ? String(url.dropFirst()) : url
     }
 
-    private static func readUInt32(_ data: Data, offset: Int) -> UInt32 {
-        guard offset + 4 <= data.count else { return 0 }
+    private static func readUInt32LE(_ data: Data, offset: Int) -> UInt32 {
+        guard offset >= 0, offset + 4 <= data.count else { return 0 }
         var value: UInt32 = 0
         withUnsafeMutableBytes(of: &value) { dest in
-            data.copyBytes(to: dest, from: offset..<offset + 4)
+            data.copyBytes(to: dest, from: (data.startIndex + offset)..<(data.startIndex + offset + 4))
         }
         return value.littleEndian
     }
 
-    private static func readDouble(_ data: Data, offset: Int) -> Double {
-        guard offset + 8 <= data.count else { return 0 }
+    private static func readUInt32BE(_ data: Data, offset: Int) -> UInt32 {
+        guard offset >= 0, offset + 4 <= data.count else { return 0 }
+        var value: UInt32 = 0
+        withUnsafeMutableBytes(of: &value) { dest in
+            data.copyBytes(to: dest, from: (data.startIndex + offset)..<(data.startIndex + offset + 4))
+        }
+        return value.bigEndian
+    }
+
+    private static func readDoubleLE(_ data: Data, offset: Int) -> Double {
+        guard offset >= 0, offset + 8 <= data.count else { return 0 }
         var bits: UInt64 = 0
         withUnsafeMutableBytes(of: &bits) { dest in
-            data.copyBytes(to: dest, from: offset..<offset + 8)
+            data.copyBytes(to: dest, from: (data.startIndex + offset)..<(data.startIndex + offset + 8))
         }
         return Double(bitPattern: bits.littleEndian)
     }
 
-    private static func readString(_ data: Data, offset: Int) -> String? {
-        guard offset < data.count else { return nil }
+    private static func readNullTerminatedString(data: Data, offset: Int, limit: Int) -> String? {
+        guard offset >= 0, limit <= data.count, offset < limit else { return nil }
         var end = offset
-        while end < data.count, data[data.startIndex + end] != 0 { end += 1 }
+        while end < limit, data[data.startIndex + end] != 0 { end += 1 }
         guard end > offset else { return nil }
         return String(data: data.subdata(in: (data.startIndex + offset)..<(data.startIndex + end)), encoding: .utf8)
     }
