@@ -31,11 +31,17 @@ struct OverviewView: View {
                     Divider().opacity(0.3)
                     quickCleanSection(run)
                     Divider().opacity(0.3)
-                    HStack(alignment: .top, spacing: 24) {
-                        browserSection(run)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        recentActivitySection
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                    ViewThatFits(in: .horizontal) {
+                        HStack(alignment: .top, spacing: 24) {
+                            browserSection(run)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            recentActivitySection
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        VStack(alignment: .leading, spacing: 24) {
+                            browserSection(run)
+                            recentActivitySection
+                        }
                     }
                 } else {
                     emptyState
@@ -106,18 +112,36 @@ struct OverviewView: View {
             }
 
             HStack(alignment: .top, spacing: 12) {
-                dashboardCard(value: "\(run.records.count)", label: "cookies totaal", color: .primary)
-                dashboardCard(
-                    value: "\(run.verdictCounts[.safeToClean, default: 0])",
-                    label: "veilig op te ruimen",
-                    color: CookieVerdict.safeToClean.semanticColor
-                )
-                dashboardCard(value: "\(run.lockedCount)", label: "beschermd", color: .primary)
-                dashboardCard(
-                    value: "\(run.categoryCounts[.marketingTracking, default: 0])",
-                    label: "tracking-cookies",
-                    color: CookieVerdict.reviewSuggested.semanticColor
-                )
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .top, spacing: 12) {
+                        dashboardCard(value: "\(run.records.count)", label: "cookies totaal", color: .primary)
+                        dashboardCard(
+                            value: "\(run.verdictCounts[.safeToClean, default: 0])",
+                            label: "veilig op te ruimen",
+                            color: CookieVerdict.safeToClean.semanticColor
+                        )
+                        dashboardCard(value: "\(run.lockedCount)", label: "beschermd", color: .primary)
+                        dashboardCard(
+                            value: "\(run.categoryCounts[.marketingTracking, default: 0])",
+                            label: "tracking-cookies",
+                            color: CookieVerdict.reviewSuggested.semanticColor
+                        )
+                    }
+                    VStack(alignment: .leading, spacing: 12) {
+                        dashboardCard(value: "\(run.records.count)", label: "cookies totaal", color: .primary)
+                        dashboardCard(
+                            value: "\(run.verdictCounts[.safeToClean, default: 0])",
+                            label: "veilig op te ruimen",
+                            color: CookieVerdict.safeToClean.semanticColor
+                        )
+                        dashboardCard(value: "\(run.lockedCount)", label: "beschermd", color: .primary)
+                        dashboardCard(
+                            value: "\(run.categoryCounts[.marketingTracking, default: 0])",
+                            label: "tracking-cookies",
+                            color: CookieVerdict.reviewSuggested.semanticColor
+                        )
+                    }
+                }
                 Spacer()
                 primaryCleanButton(run)
             }
@@ -259,7 +283,8 @@ struct OverviewView: View {
     private func quickCleanSection(_ run: ScanRun) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             SectionHeader(title: "Snelkeuzes")
-            LazyVGrid(columns: [GridItem(.flexible(), spacing: 14), GridItem(.flexible(), spacing: 14)], spacing: 14) {
+            // Adaptive: één kolom op smalle vensters, meer op brede.
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 300), spacing: 14)], spacing: 14) {
                 ForEach(QuickCleanPreset.allCases) { preset in
                     let candidates = QuickCleanEngine.candidates(for: preset, in: run)
                     QuickCleanCardView(

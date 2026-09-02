@@ -30,15 +30,16 @@ Lokale, privacy-first cookie-manager voor macOS. Leest browser-cookies op het sy
 Crumb.app (SwiftUI, Dock + menu bar, non-sandboxed)
 ├── Core/
 │   ├── Scanner/          CookieSource-protocol: ChromiumSource, SafariSource, FirefoxSource
-│   ├── Categorization/   RuleEngine + gebundelde tracker-domeinenlijst
-│   ├── Safety/           SafelistEngine — hard-block vóór alles
-│   ├── LLM/              OllamaClient — batched, async, met nette fallback
+│   ├── Categorization/   RuleEngine + gebundelde tracker-domeinenlijst (±50k, EasyPrivacy)
+│   ├── Safety/           SafelistEngine + ProtectedCookieStore + DomainRulesEngine
+│   ├── Insights/         RecommendationEngine (impact-sorteerde aanbevelingen) + InsightsEngine (score, diff, cross-browser, churn)
+│   ├── LLM/              OllamaClient — batched, deterministic, met nette fallback
 │   ├── Cleanup/          DeletionEngine + AutoCleanEngine + QuickCleanEngine + CookieBackup + AuditLog
-│   ├── Scheduling/       LaunchAgentManager (RunAtLoad + 3-uurlijkse StartInterval)
+│   ├── Scheduling/       LaunchAgentManager (RunAtLoad + instelbare frequentie)
 │   ├── Logging/          JSONRunLog per run
-│   └── Model/            CookieRecord, ScanRun, SnapshotStore
+│   └── Model/            CookieRecord, ScanRun, SnapshotStore (churn)
 ├── Crumb/
-│   ├── Views/            Home (Snelkeuzes) / Cookies / Trends / Instellingen (monochroom)
+│   ├── Views/            Dashboard + aanbevelingen / Cookies (split view + detailpaneel) / Trends (privacy-score) / Instellingen
 │   └── Resources/        AppIcon.icns + tracker-domeinenlijst
 └── CrumbAgent            CLI-binary in de app-bundle voor de launchd-agent
 ```
@@ -70,18 +71,25 @@ rm -rf build/
 
 ## First run
 
-1. Start Crumb — het hoofdvenster opent direct, de app verschijnt in het Dock en het menu-barpictogram (gestippelde cirkel) verschijnt rechtsboven terwijl de eerste scan direct begint. Sluit je het venster, dan blijft Crumb actief in de menubalk.
-2. Safari vereist **Volledige Schijftoegang**: Systeeminstellingen → Privacy & Beveiliging → Volledige Schijftoegang → voeg Crumb toe → herstart Crumb. De app linkt hier naartoe in het Overzicht.
+1. Start Crumb — bij de eerste start doorloop je een korte **onboarding**: privacybelofte, browserdetectie, Volledige Schijftoegang (indien nodig voor Safari) en optionele lokale AI. Daarna start de eerste scan. De app verschijnt in het Dock én in de menubalk; sluit je het venster, dan blijft Crumb actief in de menubalk.
+2. Safari vereist **Volledige Schijftoegang**: Systeeminstellingen → Privacy & Beveiliging → Volledige Schijftoegang → voeg Crumb toe → herstart Crumb. De app linkt hier naartoe in de onboarding en het Overzicht.
 3. Voor AI-classificatie: installeer [Ollama](https://ollama.com) en trek een model, bijvoorbeeld `ollama pull llama3.1:8b`. Zonder Ollama draait alles op de regel-laag; het rapport vermeldt dan expliciet dat AI is overgeslagen.
+
+## Interface
+
+- **Home** is een dashboard: privacy-status, hoofdactie "Veilig opschonen", **aanbevelingen gesorteerd op impact** (veilig op te ruimen, ouder dan 90 dagen, terugkerende trackers, top-trackingdomeinen), snelkeuzes en **live scanvoortgang** met per-browserstatus.
+- **Cookies** is een **split view**: compacte lijst links (filterchips, sorteren op ouderdom/churn, bulk-whitelist) en een **detailpaneel** rechts met volledige uitleg, metadata, churn en acties (verwijderen, whitelist, alleen deze cookie beschermen, vergelijkbare cookies bekijken).
+- **Trends** toont een **privacy-score** met uitleg, veranderingen t.o.v. de vorige run (nieuw/verdwijnen, trackerdruk in %), cross-browser duplicaten, churn-top en hardnekkige tracking-domeinen.
+- Elk advies verklaart zichzelf: "Beschermd: naam bevat 'session'", "Review vereist: secure + httpOnly + jonger dan 24 uur", "Niet verwijderd: AI en regellaag zijn het niet eens", "Verwijderbaar: tracker, ouder dan 30 dagen, geen bescherming".
 
 ## Snelkeuzes (1-klik opschonen)
 
-Op de vernieuwde **Home**-pagina biedt Crumb 4 interactieve snelkeuzes waarmee specifieke cookie-groepen in 1 klik veilig opgeruimd kunnen worden:
+Op de **Home**-pagina biedt Crumb 4 interactieve snelkeuzes waarmee specifieke cookie-groepen in 1 klik veilig opgeruimd kunnen worden:
 
 1. **Tracking & Marketing**: verwijdert direct alle advertentie- en tracker-cookies.
 2. **Oude Analytics (> 30d)**: ruimt analysecookies op die al meer dan een maand niet ververst zijn.
 3. **Alles Opschoonbaar**: verwijdert alle cookies die unaniem als `safeToClean` zijn beoordeeld.
-4. **Onbekende Third-Party**: ruimt niet-essentiële overige cookies op zonder actieve authenticatie.
+4. **Onbekend & verlopen**: ruimt ongeclassificeerde cookies op die verlopen of sessiegebonden zijn.
 
 Elke snelkeuze toont een live teller, vraagt expliciete bevestiging via een preview-sheet, controleert of actieve browsers gesloten zijn, en logt elke actie naar `audit.jsonl`.
 
@@ -90,8 +98,10 @@ Elke snelkeuze toont een live teller, vraagt expliciete bevestiging via een prev
 - **Auth-patronen** (`session`, `token`, `sid`, `__Secure-`, `__Host-`, …) → altijd vergrendeld.
 - **Gebruikerswhitelist** (bank, werk-SSO, e-mail) → altijd vergrendeld, los van elk advies. Invoer zoals `https://bank.nl/login` of `WWW.Bank.nl` wordt automatisch genormaliseerd naar `bank.nl`; import/export via Instellingen.
 - **Recente actieve sessies** (secure + httpOnly + jonger dan 24 uur) → maximaal `reviewSuggested` en nooit in bulk-voorselekten (snelkeuzes en auto-clean nemen deze cookies nooit mee).
-- **Back-up vóór verwijdering.** Elke verwijderingsactie schrijft eerst de volledige rijen weg naar een lokaal back-upbestand (alleen-lezen voor de eigenaar). Lukt de back-up niet, dan wordt er niet verwijderd. Herstellen kan via Instellingen → Back-ups (browser moet gesloten zijn).
-- **Auto-clean** is opt-in per categorie (aanbevolen: alleen marketing/tracking, ouder dan X dagen, unanieme goedkeuring) en schrijft een audit-logregel per verwijdering. De achtergrond-agent toont daarna een macOS-notificatie met het aantal opgeruimde cookies.
+- **Back-up vóór verwijdering.** Elke verwijderingsactie schrijft eerst de volledige rijen weg naar een lokaal back-upbestand (alleen-lezen voor de eigenaar). Lukt de back-up niet, dan wordt er niet verwijderd. Herstellen kan via Instellingen → Back-ups (browser moet gesloten zijn); bewaartermijn instelbaar (7–365 dagen of voor altijd).
+- **Domeinregels.** Fijnmaziger dan de whitelist: per domein altijd bewaren, altijd als tracking markeren, cookies ouder dan X dagen opschonen, of een specifieke cookienaam beschermen/opschonen — optioneel per browser. Beschermde cookies raken regels nooit.
+- **Handmatige cookie-bescherming.** In het detailpaneel kan één specifieke cookie (domain|name|path) permanent beschermd worden.
+- **Auto-clean** is opt-in per categorie met veiligheidskleppen: **dry-run preview**, limiet per run (standaard 100), optionele startdrempel ("pas opruimen bij minstens 20 veilige cookies") en instelbare agent-frequentie (1/3/6/12 uur). Elke verwijdering wordt geback-upt en gelogd; de agent-notificatie vermeldt ook het aantal geblokkeerde/mislukte cookies. Het **audit-log** is doorzoekbaar, filterbaar en exporteerbaar als CSV/JSON.
 
 ## Tracker-lijst
 
@@ -126,5 +136,6 @@ Het script bouwt Release, tekent met hardened runtime (inclusief de embedded `Cr
 - [x] Fase 7 — Handmatige verwijdering + opt-in auto-clean + audit-log
 - [x] Fase 8 — Developer ID-signing + notarization (`scripts/build-release.sh`)
 - [x] Fase 9 — Verharding & beheer: dubbele goedkeuring afgedwongen, back-ups + herstellen, Safari-parser (canoniek binarycookies-formaat), trackerlijst via EasyPrivacy, whitelist-normalisatie, churn-detectie, log-/back-uprotatie, agent-notificaties, per-cookie acties, CI-releaseverificatie
+- [x] Fase 10 — Vertrouwen & inzichten: onboarding, dashboard met impact-gesorteerde aanbevelingen, cookie-detailpaneel, verklarende adviezen, scanvoortgang, domeinregels, auto-clean dry-run/limiet/drempel, instelbare planning, audit-log filteren/exporteren, privacy-score, cross-browser duplicaten, nieuw/verdwijnen-diff, handmatige cookie-bescherming
 - [x] Fase 9 — Homepage met interactieve snelkeuzes voor 1-klik opschonen
 

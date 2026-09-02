@@ -11,7 +11,7 @@ struct CrumbApp: App {
     var body: some Scene {
         Window("Crumb", id: "main") {
             MainContentView()
-                .frame(minWidth: 860, minHeight: 580)
+                .frame(minWidth: 720, minHeight: 560)
                 .environmentObject(scanService)
                 .environmentObject(whitelist)
                 .environmentObject(settings)
