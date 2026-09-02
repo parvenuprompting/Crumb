@@ -44,6 +44,13 @@ final class ScanService: ObservableObject {
         objectWillChange.send()
     }
 
+    /// Laadt de laatste run van disk (bijv. van de achtergrond-agent) zodat de
+    /// UI direct een actuele stand toont, ook vóór de eerste scan in deze sessie.
+    func loadLastRunFromDisk() {
+        guard lastRun == nil else { return }
+        lastRun = JSONRunLog.lastRun()
+    }
+
     func runScan() async {
         guard !isScanning else { return }
         isScanning = true
@@ -96,7 +103,8 @@ final class ScanService: ObservableObject {
             records: records,
             aiUsed: aiUsed,
             aiClassifiedCount: aiClassified,
-            aiSkippedReason: aiSkippedReason
+            aiSkippedReason: aiSkippedReason,
+            origin: "app"
         )
         lastRun = run
 
@@ -105,7 +113,13 @@ final class ScanService: ObservableObject {
         } catch {
             lastError = "Kon run niet wegschrijven: \(error.localizedDescription)"
         }
+
+        // Onderhoud: rapporten en back-ups niet onbeperkt laten groeien.
+        try? JSONRunLog.deleteLogs(olderThan: Self.retentionInterval)
+        try? CookieBackupStore.deleteBackups(olderThan: Self.retentionInterval)
     }
+
+    nonisolated static let retentionInterval: TimeInterval = 90 * 24 * 60 * 60
 
     nonisolated static func scanSources(_ sources: [any CookieSource]) async -> (statuses: [ScanSourceStatus], cookies: [RawCookie]) {
         var statuses: [ScanSourceStatus] = []

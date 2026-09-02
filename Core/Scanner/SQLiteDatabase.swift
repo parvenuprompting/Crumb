@@ -34,9 +34,10 @@ enum SQLiteValue {
 final class SQLiteDatabase {
     private var handle: OpaquePointer?
 
-    init(path: String, readWrite: Bool = false) throws {
+    init(path: String, readWrite: Bool = false, createIfNeeded: Bool = false) throws {
         var db: OpaquePointer?
-        let flags = readWrite ? SQLITE_OPEN_READWRITE : SQLITE_OPEN_READONLY
+        var flags: Int32 = readWrite ? SQLITE_OPEN_READWRITE : SQLITE_OPEN_READONLY
+        if createIfNeeded { flags |= SQLITE_OPEN_CREATE }
         guard sqlite3_open_v2(path, &db, flags, nil) == SQLITE_OK, let db else {
             let message = db.map { String(cString: sqlite3_errmsg($0)) } ?? "onbekende fout"
             sqlite3_close(db)
@@ -65,19 +66,37 @@ final class SQLiteDatabase {
         return names
     }
 
-    func execute(_ sql: String, parameters: [String] = []) throws -> Int {
+    private func bind(_ stmt: OpaquePointer?, parameters: [SQLiteValue]) throws {
+        let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+        for (index, value) in parameters.enumerated() {
+            let rc: Int32
+            switch value {
+            case .null:
+                rc = sqlite3_bind_null(stmt, Int32(index + 1))
+            case .int(let v):
+                rc = sqlite3_bind_int64(stmt, Int32(index + 1), v)
+            case .double(let v):
+                rc = sqlite3_bind_double(stmt, Int32(index + 1), v)
+            case .text(let v):
+                rc = sqlite3_bind_text(stmt, Int32(index + 1), v, -1, transient)
+            case .blob(let data):
+                rc = data.withUnsafeBytes { raw in
+                    sqlite3_bind_blob(stmt, Int32(index + 1), raw.baseAddress, Int32(data.count), transient)
+                }
+            }
+            guard rc == SQLITE_OK else {
+                throw CookieScanError.readFailed(String(cString: sqlite3_errmsg(handle)))
+            }
+        }
+    }
+
+    func execute(_ sql: String, parameters: [SQLiteValue] = []) throws -> Int {
         var stmt: OpaquePointer?
         guard sqlite3_prepare_v2(handle, sql, -1, &stmt, nil) == SQLITE_OK else {
             throw CookieScanError.readFailed(String(cString: sqlite3_errmsg(handle)))
         }
         defer { sqlite3_finalize(stmt) }
-
-        let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
-        for (index, value) in parameters.enumerated() {
-            guard sqlite3_bind_text(stmt, Int32(index + 1), value, -1, transient) == SQLITE_OK else {
-                throw CookieScanError.readFailed(String(cString: sqlite3_errmsg(handle)))
-            }
-        }
+        try bind(stmt, parameters: parameters)
 
         guard sqlite3_step(stmt) == SQLITE_DONE else {
             throw CookieScanError.readFailed(String(cString: sqlite3_errmsg(handle)))
@@ -85,12 +104,18 @@ final class SQLiteDatabase {
         return Int(sqlite3_changes(handle))
     }
 
-    func query(_ sql: String) throws -> [[String: SQLiteValue]] {
+    /// Handige variant voor tekstparameters.
+    func execute(_ sql: String, parameters: [String]) throws -> Int {
+        try execute(sql, parameters: parameters.map(SQLiteValue.text))
+    }
+
+    func query(_ sql: String, parameters: [SQLiteValue] = []) throws -> [[String: SQLiteValue]] {
         var stmt: OpaquePointer?
         guard sqlite3_prepare_v2(handle, sql, -1, &stmt, nil) == SQLITE_OK else {
             throw CookieScanError.readFailed(String(cString: sqlite3_errmsg(handle)))
         }
         defer { sqlite3_finalize(stmt) }
+        try bind(stmt, parameters: parameters)
 
         var rows: [[String: SQLiteValue]] = []
         while sqlite3_step(stmt) == SQLITE_ROW {

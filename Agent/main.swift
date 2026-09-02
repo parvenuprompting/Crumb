@@ -46,7 +46,8 @@ let run = ScanRun(
     records: records,
     aiUsed: aiUsed,
     aiClassifiedCount: aiCount,
-    aiSkippedReason: aiSkipped
+    aiSkippedReason: aiSkipped,
+    origin: "agent"
 )
 
 do {
@@ -57,6 +58,11 @@ do {
 
 let autoCleanSettings = AutoCleanSettings.fromDefaults(defaults)
 let cleaned = await AutoCleanEngine.process(run: run, settings: autoCleanSettings)
+
+let autoCleanDeleted = cleaned.filter { $0.result == "deleted" }.count
+if autoCleanDeleted > 0 {
+    Notifier.post(title: "Crumb", message: "Auto-clean: \(autoCleanDeleted) cookie(s) opgeruimd.")
+}
 
 struct AgentSummary: Codable {
     struct SourceSummary: Codable {
@@ -87,7 +93,7 @@ let summary = AgentSummary(
     locked: records.filter(\.protection.isLocked).count,
     aiUsed: aiUsed,
     aiClassified: aiCount,
-    autoCleanDeleted: cleaned.filter { $0.result == "deleted" }.count,
+    autoCleanDeleted: autoCleanDeleted,
     autoCleanFailed: cleaned.filter { $0.result != "deleted" }.count,
     sources: statuses.map {
         AgentSummary.SourceSummary(browser: $0.browser, scanned: $0.scanned, cookies: $0.cookieCount, error: $0.error)

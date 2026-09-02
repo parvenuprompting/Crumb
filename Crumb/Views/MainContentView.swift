@@ -48,7 +48,7 @@ struct MenuPanelView: View {
             }
 
             if let run = scanService.lastRun {
-                Text("Laatste scan: \(run.finishedAt.runTimestamp)")
+                Text("Laatste scan: \(run.finishedAt.runTimestamp)\(run.origin == "agent" ? " · agent" : "")")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 if let used = run.aiUsed, used {

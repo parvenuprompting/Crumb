@@ -36,6 +36,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         guard ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil else { return }
         NSApp.activate(ignoringOtherApps: true)
+        ScanService.shared.loadLastRunFromDisk()
         Task { @MainActor in
             await ScanService.shared.runScan()
         }

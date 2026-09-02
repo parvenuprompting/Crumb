@@ -16,6 +16,8 @@ struct ScanRun: Codable, Hashable, Sendable {
     var aiUsed: Bool? = nil
     var aiClassifiedCount: Int? = nil
     var aiSkippedReason: String? = nil
+    /// "app" of "agent" — afkomst van de run (oudere rapporten: nil).
+    var origin: String? = nil
 
     var categoryCounts: [CookieCategory: Int] {
         Dictionary(grouping: records, by: \.category).mapValues(\.count)

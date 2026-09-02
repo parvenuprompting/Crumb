@@ -146,8 +146,16 @@ struct OverviewView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     SectionHeader(title: "Laatste run")
                     if let run {
-                        Text(run.finishedAt.runTimestamp)
-                            .font(.title3.weight(.semibold))
+                        HStack(alignment: .firstTextBaseline, spacing: 6) {
+                            Text(run.finishedAt.runTimestamp)
+                                .font(.title3.weight(.semibold))
+                            if run.origin == "agent" {
+                                Text("Achtergrond-agent")
+                                    .font(.caption.weight(.semibold))
+                                    .tracking(0.04)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
                         Text("Duur: \(String(format: "%.1f", run.finishedAt.timeIntervalSince(run.startedAt))) s · \(run.records.count) cookies")
                             .font(.callout)
                             .foregroundStyle(.secondary)

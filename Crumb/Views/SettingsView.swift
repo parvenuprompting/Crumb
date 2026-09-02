@@ -8,6 +8,9 @@ struct SettingsView: View {
     @State private var agentStatusChecked = false
     @State private var agentInstalled = false
     @State private var auditEntries: [AuditEntry] = []
+    @State private var backups: [BackupMetadata] = []
+    @State private var isRestoring = false
+    @State private var restoreMessage: String?
 
     var body: some View {
         ScrollView {
@@ -16,6 +19,7 @@ struct SettingsView: View {
                 aiSection
                 autoCleanSection
                 agentSection
+                backupsSection
                 auditSection
                 logSection
             }
@@ -26,6 +30,7 @@ struct SettingsView: View {
             agentInstalled = LaunchAgentManager.isInstalled()
             agentStatusChecked = true
             auditEntries = AuditLog.allEntries(limit: 15)
+            backups = CookieBackupStore.listBackups(limit: 8)
             Task { await settings.refreshOllamaStatus() }
         }
     }
@@ -159,6 +164,67 @@ struct SettingsView: View {
                 .font(.caption)
                 .monospaced()
                 .textSelection(.enabled)
+        }
+    }
+
+    private var backupsSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            SectionHeader(title: "Back-ups (vóór verwijdering)")
+            Text("Elke verwijderingsactie schrijft eerst een back-up weg; lukt dat niet, dan wordt er niet verwijderd. Back-ups bevatten cookie-waarden en blijven lokaal staan met alleen-lezenrechten voor de eigenaar.")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+
+            if backups.isEmpty {
+                Text("Nog geen back-ups.")
+                    .font(.callout)
+                    .foregroundStyle(.tertiary)
+            } else {
+                ForEach(backups) { backup in
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(backup.createdAt.runTimestamp)
+                                .font(.callout.weight(.medium))
+                            Text("\(backup.entryCount) cookies")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Button("Herstellen") { restoreBackup(backup) }
+                            .controlSize(.small)
+                            .disabled(isRestoring)
+                    }
+                    .padding(.vertical, 2)
+                    Divider().opacity(0.4)
+                }
+            }
+
+            if let restoreMessage {
+                Text(restoreMessage)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            HStack {
+                Button("Verwijder back-ups ouder dan 90 dagen") {
+                    _ = try? CookieBackupStore.deleteBackups(olderThan: 90 * 24 * 60 * 60)
+                    backups = CookieBackupStore.listBackups(limit: 8)
+                }
+                Button("Open map") {
+                    NSWorkspace.shared.open(CookieBackupStore.directory)
+                }
+            }
+            .controlSize(.small)
+        }
+    }
+
+    private func restoreBackup(_ backup: BackupMetadata) {
+        isRestoring = true
+        restoreMessage = nil
+        Task { @MainActor in
+            let outcome = await CookieBackupStore.restore(from: backup.url)
+            isRestoring = false
+            restoreMessage = "\(outcome.summary) — herstart de browser om de cookies te zien."
+            backups = CookieBackupStore.listBackups(limit: 8)
         }
     }
 

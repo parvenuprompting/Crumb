@@ -100,6 +100,11 @@ struct TrendsView: View {
                     Text(aiLabel(run))
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                    if run.origin == "agent" {
+                        Text("agent")
+                            .font(.caption2.weight(.medium))
+                            .foregroundStyle(.secondary)
+                    }
                 }
                 .padding(.vertical, 2)
                 Divider().opacity(0.4)
