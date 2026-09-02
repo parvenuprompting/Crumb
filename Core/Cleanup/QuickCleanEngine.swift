@@ -17,7 +17,7 @@ enum QuickCleanPreset: String, CaseIterable, Identifiable, Sendable {
         case .allSafeToClean:
             return "Alles Opschoonbaar"
         case .unclassifiedNonEssential:
-            return "Onbekende Third-Party"
+            return "Onbekend & verlopen"
         }
     }
 
@@ -30,7 +30,7 @@ enum QuickCleanPreset: String, CaseIterable, Identifiable, Sendable {
         case .allSafeToClean:
             return "Verwijdert cookies die unaniem als veilig zijn beoordeeld."
         case .unclassifiedNonEssential:
-            return "Ruimt niet-essentiële overige cookies op zonder logins."
+            return "Ruimt ongeclassificeerde cookies op die zijn verlopen of sessiegebonden — geen logins, geen beveiligde cookies."
         }
     }
 
@@ -71,12 +71,15 @@ enum QuickCleanEngine {
                 return record.verdict == .safeToClean
 
             case .unclassifiedNonEssential:
+                // Alleen ongeclassificeerde cookies die geen rol (meer) spelen:
+                // verlopen of sessiegebonden, en nooit beveiligde cookies die
+                // als sessie/auth kunnen fungeren.
                 guard record.category == .thirdPartyUnknown || record.category == .unknown else {
                     return false
                 }
                 guard !record.isSecure || !record.isHttpOnly else { return false }
-                guard record.verdict != .keep else { return false }
-                return true
+                if let expiry = record.expiry { return expiry < now }
+                return record.isSessionOnly
             }
         }
     }

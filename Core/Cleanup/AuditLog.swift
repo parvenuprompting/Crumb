@@ -15,8 +15,11 @@ struct AuditEntry: Codable, Sendable {
 }
 
 enum AuditLog {
+    /// Test-seam: laat tests naar een tijdelijk bestand schrijven.
+    static var overrideURL: URL?
+
     static var fileURL: URL {
-        FileManager.default.homeDirectoryForCurrentUser
+        overrideURL ?? FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Application Support/Crumb/audit.jsonl")
     }
 
@@ -24,6 +27,11 @@ enum AuditLog {
         guard !entries.isEmpty else { return }
         let dir = fileURL.deletingLastPathComponent()
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        // FileHandle(forWritingTo:) faalt als het bestand nog niet bestaat —
+        // maak het expliciet aan zodat de allereerste verwijdering gelogd wordt.
+        if !FileManager.default.fileExists(atPath: fileURL.path) {
+            FileManager.default.createFile(atPath: fileURL.path, contents: nil)
+        }
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         var lines = ""

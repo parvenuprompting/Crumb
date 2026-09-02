@@ -144,7 +144,17 @@ final class ScanService: ObservableObject {
         do {
             try await client.verify(model: model)
             let engine = RuleEngine(trackerList: trackerList, now: now)
-            let candidates = rawCookies.filter { engine.provisionalCategory(for: $0) == .unknown }
+            let candidates = rawCookies
+                .filter { engine.isAICandidate($0) }
+                .sorted { a, b in
+                    let pa = aiPriority(engine.provisionalCategory(for: a))
+                    let pb = aiPriority(engine.provisionalCategory(for: b))
+                    if pa != pb { return pa < pb }
+                    let da = a.domain.lowercased()
+                    let db = b.domain.lowercased()
+                    if da != db { return da < db }
+                    return a.name.lowercased() < b.name.lowercased()
+                }
             let inputs = candidates.map { cookie in
                 CookiePromptInput(
                     domain: cookie.domain,
@@ -167,7 +177,7 @@ final class ScanService: ObservableObject {
             var classified = 0
             var updated = rawCookies
             for index in updated.indices {
-                guard engine.provisionalCategory(for: updated[index]) == .unknown else { continue }
+                guard engine.isAICandidate(updated[index]) else { continue }
                 let key = "\(updated[index].domain.lowercased())|\(updated[index].name)"
                 guard let judgement = byKey[key] else { continue }
                 updated[index].aiCategory = judgement.category
@@ -180,6 +190,17 @@ final class ScanService: ObservableObject {
             return (updated, used, classified, reason)
         } catch {
             return (rawCookies, false, 0, "AI-classificatie overgeslagen: \(error.localizedDescription)")
+        }
+    }
+
+    /// Binnen de batchcap krijgt 'onbekend' voorrang (meeste winst), daarna
+    /// regel-laag-kandidaten die bevestiging nodig hebben.
+    nonisolated private static func aiPriority(_ category: CookieCategory) -> Int {
+        switch category {
+        case .unknown: return 0
+        case .marketingTracking: return 1
+        case .analytics: return 2
+        default: return 3
         }
     }
 

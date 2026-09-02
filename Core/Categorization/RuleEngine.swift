@@ -30,7 +30,7 @@ struct RuleEngine: Sendable {
             return (
                 category,
                 .reviewSuggested,
-                "Matcht bekende tracking/advertentie-domein. Advies volgt alleen uit de regellaag — bevestig handmatig (AI-laag volgt in latere versie)."
+                "Matcht bekende tracking/advertentie-domein — opschoonkandidaat volgens de regellaag. Bevestigt de AI dit, dan wordt het advies 'opschoonbaar'."
             )
         case .analytics:
             if let creation = raw.creation, now.timeIntervalSince(creation) > Self.analyticsAgeThreshold {
@@ -40,12 +40,27 @@ struct RuleEngine: Sendable {
         case .functional:
             return (category, .keep, "Beveiligde first-party cookie (secure + httpOnly) — waarschijnlijk functioneel.")
         default:
-            return (.unknown, .keep, "Onvoldoende indicatie uit regellaag; AI-classificatie volgt in een latere versie.")
+            return (.unknown, .keep, "Onvoldoende indicatie uit de regellaag; de AI kan dit cookie nader indelen.")
         }
     }
 
     func provisionalCategory(for raw: RawCookie) -> CookieCategory {
         nonEssentialCategory(raw: raw)
+    }
+
+    /// Cookies die de AI-laag mag beoordelen: onbekende cookies (voor
+    /// categorisatie) plus regel-laag-kandidaten (voor bevestiging van
+    /// 'opschoonbaar' — de dubbele goedkeuring).
+    func isAICandidate(_ raw: RawCookie) -> Bool {
+        switch nonEssentialCategory(raw: raw) {
+        case .unknown, .marketingTracking:
+            return true
+        case .analytics:
+            guard let creation = raw.creation else { return false }
+            return now.timeIntervalSince(creation) > Self.analyticsAgeThreshold
+        default:
+            return false
+        }
     }
 
     private func nonEssentialCategory(raw: RawCookie) -> CookieCategory {

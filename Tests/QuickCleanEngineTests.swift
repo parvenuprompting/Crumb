@@ -12,7 +12,9 @@ final class QuickCleanEngineTests: XCTestCase {
         protection: CookieProtection = .none,
         firstSeenDaysAgo: Double = 0,
         isSecure: Bool = false,
-        isHttpOnly: Bool = false
+        isHttpOnly: Bool = false,
+        isSessionOnly: Bool = false,
+        expiry: Date? = nil
     ) -> CookieRecord {
         let firstSeen = now.addingTimeInterval(-firstSeenDaysAgo * 86_400)
         return CookieRecord(
@@ -21,10 +23,10 @@ final class QuickCleanEngineTests: XCTestCase {
             valueHash: "hash",
             browser: "Chrome",
             path: "/",
-            expiry: nil,
+            expiry: expiry,
             isSecure: isSecure,
             isHttpOnly: isHttpOnly,
-            isSessionOnly: false,
+            isSessionOnly: isSessionOnly,
             firstSeen: firstSeen,
             lastSeen: firstSeen,
             category: category,
@@ -69,6 +71,64 @@ final class QuickCleanEngineTests: XCTestCase {
         let candidates = QuickCleanEngine.candidates(for: .allSafeToClean, in: run, now: now)
         XCTAssertEqual(candidates.count, 2)
         XCTAssertEqual(candidates.map(\.name), ["c1", "c2"])
+    }
+
+    func testUnclassifiedPresetSelectsExpiredAndSessionCookies() {
+        let expiredUnknown = makeRecord(
+            name: "old_unknown",
+            category: .unknown,
+            verdict: .keep,
+            expiry: now.addingTimeInterval(-86_400)
+        )
+        let sessionUnknown = makeRecord(
+            name: "session_unknown",
+            category: .unknown,
+            verdict: .keep,
+            isSessionOnly: true
+        )
+        let expiredThirdParty = makeRecord(
+            name: "expired_tp",
+            category: .thirdPartyUnknown,
+            verdict: .keep,
+            expiry: now.addingTimeInterval(-3_600)
+        )
+        let run = makeRun(records: [expiredUnknown, sessionUnknown, expiredThirdParty])
+
+        let candidates = QuickCleanEngine.candidates(for: .unclassifiedNonEssential, in: run, now: now)
+        XCTAssertEqual(candidates.map(\.name).sorted(), ["expired_tp", "old_unknown", "session_unknown"])
+    }
+
+    func testUnclassifiedPresetRejectsActiveAndSecureCookies() {
+        let futureExpiry = makeRecord(
+            name: "active_unknown",
+            category: .unknown,
+            verdict: .keep,
+            expiry: now.addingTimeInterval(30 * 86_400)
+        )
+        let secureSession = makeRecord(
+            name: "secure_unknown",
+            category: .unknown,
+            verdict: .keep,
+            isSecure: true,
+            isHttpOnly: true,
+            expiry: now.addingTimeInterval(-86_400)
+        )
+        let tracked = makeRecord(
+            name: "tracker",
+            category: .marketingTracking,
+            verdict: .reviewSuggested,
+            expiry: now.addingTimeInterval(-86_400)
+        )
+        let locked = makeRecord(
+            name: "locked_unknown",
+            category: .unknown,
+            verdict: .keep,
+            protection: .locked("whitelist"),
+            expiry: now.addingTimeInterval(-86_400)
+        )
+        let run = makeRun(records: [futureExpiry, secureSession, tracked, locked])
+
+        XCTAssertTrue(QuickCleanEngine.candidates(for: .unclassifiedNonEssential, in: run, now: now).isEmpty)
     }
 
     func testSafelistLockedCookiesAreNeverCandidates() {

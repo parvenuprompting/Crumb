@@ -230,19 +230,42 @@ struct OllamaClient: Sendable {
         }
     }
 
-    func classifyAll(model: String, cookies: [CookiePromptInput]) async -> [LLMCookieJudgement] {
+    /// Bepaalt welke batches de AI krijgt, deterministisch: input gesorteerd op
+    /// (domein, naam), gegroepeerd per domein, gekapt op `maxBatches`. Zelfde
+    /// input levert altijd dezelfde batches — ook bij een gewijzigde cap.
+    static func buildBatches(
+        cookies: [CookiePromptInput],
+        cookiesPerBatch: Int,
+        maxBatches: Int
+    ) -> [[CookiePromptInput]] {
+        guard cookiesPerBatch > 0, maxBatches > 0 else { return [] }
+        let sorted = cookies.sorted { a, b in
+            let da = a.domain.lowercased()
+            let db = b.domain.lowercased()
+            if da != db { return da < db }
+            return a.name.lowercased() < b.name.lowercased()
+        }
+        let byDomain = Dictionary(grouping: sorted, by: \.domain)
         var batches: [[CookiePromptInput]] = []
-        let byDomain = Dictionary(grouping: cookies, by: \.domain)
-        for (_, group) in byDomain {
+        for domain in byDomain.keys.sorted() {
+            let group = byDomain[domain] ?? []
             var index = group.startIndex
             while index < group.endIndex {
                 let end = group.index(index, offsetBy: cookiesPerBatch, limitedBy: group.endIndex) ?? group.endIndex
                 batches.append(Array(group[index..<end]))
                 index = end
+                if batches.count >= maxBatches { return batches }
             }
-            if batches.count >= maxBatchesPerRun { break }
         }
-        batches = Array(batches.prefix(maxBatchesPerRun))
+        return batches
+    }
+
+    func classifyAll(model: String, cookies: [CookiePromptInput]) async -> [LLMCookieJudgement] {
+        let batches = Self.buildBatches(
+            cookies: cookies,
+            cookiesPerBatch: cookiesPerBatch,
+            maxBatches: maxBatchesPerRun
+        )
 
         var judgements: [LLMCookieJudgement] = []
         await withTaskGroup(of: [LLMCookieJudgement].self) { group in

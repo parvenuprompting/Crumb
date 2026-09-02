@@ -1,16 +1,21 @@
 import Foundation
 
 enum JSONRunLog {
+    /// Test-seam: laat tests naar een tijdelijke map schrijven.
+    static var overrideDirectory: URL?
+
     static var logsDirectory: URL {
-        FileManager.default.homeDirectoryForCurrentUser
+        overrideDirectory ?? FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Application Support/Crumb/logs", isDirectory: true)
     }
 
     static func write(run: ScanRun) throws -> URL {
         try FileManager.default.createDirectory(at: logsDirectory, withIntermediateDirectories: true)
 
+        // Milliseconden mee in de naam zodat twee runs binnen dezelfde seconde
+        // (bijv. app-scan + LaunchAgent) elkaar niet overschrijven.
         let formatter = DateFormatter()
-        formatter.dateFormat = "yyyyMMdd-HHmmss"
+        formatter.dateFormat = "yyyyMMdd-HHmmss-SSS"
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.timeZone = .current
         let fileURL = logsDirectory.appendingPathComponent("run-\(formatter.string(from: run.startedAt)).json")

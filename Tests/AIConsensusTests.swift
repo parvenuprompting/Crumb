@@ -44,13 +44,42 @@ final class AIConsensusTests: XCTestCase {
         XCTAssertEqual(outcome.verdict, .reviewSuggested)
     }
 
-    func testSafeOnMarketingTrackingBecomesSafeToClean() {
+    func testSafeRequiresRuleLayerAgreement() {
+        // Regel-laag zegt unknown/keep: AI alleen is nooit genoeg.
         let outcome = AIConsensus.apply(
             judgement: judgement(category: .marketingTracking, verdict: .safe),
-            to: record(category: .unknown)
+            to: record(category: .unknown, verdict: .keep)
+        )
+        XCTAssertEqual(outcome.verdict, .reviewSuggested)
+        XCTAssertTrue(outcome.reasoning.contains("regel-laag"))
+        XCTAssertFalse(outcome.reasoning.contains("beide opschonen"))
+    }
+
+    func testSafeOnRuleLayerTrackerCandidateBecomesSafeToClean() {
+        // Regel-laag markeert als opschoonkandidaat, AI bevestigt: safeToClean.
+        let outcome = AIConsensus.apply(
+            judgement: judgement(category: .marketingTracking, verdict: .safe),
+            to: record(category: .marketingTracking, verdict: .reviewSuggested)
         )
         XCTAssertEqual(outcome.verdict, .safeToClean)
         XCTAssertTrue(outcome.reasoning.contains("beide"))
+    }
+
+    func testSafeOnStaleAnalyticsCandidateBecomesSafeToClean() {
+        let outcome = AIConsensus.apply(
+            judgement: judgement(category: .analytics, verdict: .safe),
+            to: record(category: .analytics, verdict: .reviewSuggested)
+        )
+        XCTAssertEqual(outcome.verdict, .safeToClean)
+    }
+
+    func testSafeOnRecentAnalyticsIsDowngraded() {
+        // Regel-laag houdt recente analytics bij ('keep'): AI kan dat niet overrulen.
+        let outcome = AIConsensus.apply(
+            judgement: judgement(category: .analytics, verdict: .safe),
+            to: record(category: .analytics, verdict: .keep)
+        )
+        XCTAssertEqual(outcome.verdict, .reviewSuggested)
     }
 
     func testSafeOnEssentialIsDowngraded() {
@@ -67,6 +96,54 @@ final class AIConsensusTests: XCTestCase {
             to: record(protection: .locked("whitelist"))
         )
         XCTAssertEqual(outcome.verdict, .reviewSuggested)
+    }
+
+    func testBuildBatchesAreDeterministicAndSorted() {
+        let cookies = (0..<30).map { i in
+            CookiePromptInput(
+                domain: "d\(i % 10).com",
+                name: "n\(i)",
+                isSecure: false,
+                isHttpOnly: false,
+                isSessionOnly: false,
+                hasExpiry: false,
+                expiresInSeconds: nil,
+                browser: "Chrome"
+            )
+        }
+        let batches1 = OllamaClient.buildBatches(cookies: cookies, cookiesPerBatch: 3, maxBatches: 5)
+        let batches2 = OllamaClient.buildBatches(cookies: cookies.reversed(), cookiesPerBatch: 3, maxBatches: 5)
+
+        XCTAssertEqual(batches1.count, 5)
+        XCTAssertEqual(batches1.map { $0.map(\.name) }, batches2.map { $0.map(\.name) })
+        // Elk domein blijft binnen één batch, en batches zijn op domein gesorteerd.
+        for batch in batches1 {
+            XCTAssertEqual(Set(batch.map(\.domain)).count, 1)
+        }
+        let domains = batches1.compactMap(\.first?.domain)
+        XCTAssertEqual(domains, domains.sorted())
+    }
+
+    func testBuildBatchesCoversAllCookiesUnderCap() {
+        // 4 cookies per domein, 3 per batch: elk domein splitst in 3+1,
+        // alle cookies blijven binnen de cap.
+        let cookies = (0..<12).map { i in
+            CookiePromptInput(
+                domain: "d\(i % 3).com",
+                name: "n\(i)",
+                isSecure: false,
+                isHttpOnly: false,
+                isSessionOnly: false,
+                hasExpiry: false,
+                expiresInSeconds: nil,
+                browser: "Chrome"
+            )
+        }
+        let batches = OllamaClient.buildBatches(cookies: cookies, cookiesPerBatch: 3, maxBatches: 10)
+        XCTAssertEqual(batches.flatMap { $0 }.count, 12)
+        XCTAssertEqual(batches.count, 6)
+        XCTAssertTrue(batches.allSatisfy { (1...3).contains($0.count) })
+        XCTAssertTrue(batches.allSatisfy { Set($0.map(\.domain)).count == 1 })
     }
 
     func testUnknownLLMCategoryFallsBackToRecordCategory() {
