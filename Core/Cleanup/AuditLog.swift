@@ -57,4 +57,39 @@ enum AuditLog {
             }
             .reversed()
     }
+
+    // MARK: Export
+
+    static func csv(entries: [AuditEntry]) -> String {
+        let header = "timestamp,mode,browser,domain,name,path,category,verdict,result,detail"
+        let formatter = ISO8601DateFormatter()
+        var rows: [String] = [header]
+        for entry in entries {
+            let fields: [String] = [
+                formatter.string(from: entry.timestamp),
+                entry.mode,
+                entry.browser,
+                entry.domain,
+                entry.name,
+                entry.path,
+                entry.category,
+                entry.verdict,
+                entry.result,
+                entry.detail ?? ""
+            ]
+            rows.append(fields.map { "\"\($0.replacingOccurrences(of: "\"", with: "\"\""))\"" }.joined(separator: ","))
+        }
+        return rows.joined(separator: "\n") + "\n"
+    }
+
+    static func exportCSV(entries: [AuditEntry], to url: URL) throws {
+        try csv(entries: entries).write(to: url, atomically: true, encoding: .utf8)
+    }
+
+    static func exportJSON(entries: [AuditEntry], to url: URL) throws {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        try encoder.encode(entries).write(to: url, options: .atomic)
+    }
 }

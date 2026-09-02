@@ -3,6 +3,9 @@ import Foundation
 let startedAt = Date()
 let defaults = UserDefaults.standard
 
+let protectedCookies = Set(ProtectedCookieStore.load().keys)
+let domainRules = DomainRulesStore.load().rules
+
 let (statuses, rawCookies) = await ScanService.scanSources(ScanService.buildSources())
 
 var cookies = rawCookies
@@ -36,7 +39,9 @@ let records = await ScanService.buildRecords(
     rawCookies: cookies,
     whitelist: whitelist,
     trackerList: trackerList,
-    now: startedAt
+    now: startedAt,
+    protectedCookies: protectedCookies,
+    domainRules: domainRules
 )
 
 let run = ScanRun(
@@ -58,14 +63,27 @@ do {
 
 // Onderhoud: rapporten en back-ups niet onbeperkt laten groeien.
 try? JSONRunLog.deleteLogs(olderThan: 90 * 24 * 60 * 60)
-try? CookieBackupStore.deleteBackups(olderThan: 90 * 24 * 60 * 60)
+let backupRetentionDays = defaults.object(forKey: "backupRetentionDays") as? Int ?? 90
+if backupRetentionDays > 0 {
+    try? CookieBackupStore.deleteBackups(olderThan: TimeInterval(backupRetentionDays) * 86_400)
+}
 
 let autoCleanSettings = AutoCleanSettings.fromDefaults(defaults)
-let cleaned = await AutoCleanEngine.process(run: run, settings: autoCleanSettings)
+let autoCleanCandidates = AutoCleanEngine.candidates(in: run, settings: autoCleanSettings)
+let thresholdSkipped = AutoCleanEngine.thresholdSkipped(candidates: autoCleanCandidates, settings: autoCleanSettings)
+let cleaned = thresholdSkipped ? [] : await AutoCleanEngine.process(run: run, settings: autoCleanSettings)
 
 let autoCleanDeleted = cleaned.filter { $0.result == "deleted" }.count
 if autoCleanDeleted > 0 {
-    Notifier.post(title: "Crumb", message: "Auto-clean: \(autoCleanDeleted) cookie(s) opgeruimd.")
+    let blocked = cleaned.filter { $0.result != "deleted" }.count
+    var message = "Auto-clean: \(autoCleanDeleted) cookie(s) opgeruimd."
+    if blocked > 0 { message += " \(blocked) geblokkeerd of mislukt." }
+    Notifier.post(title: "Crumb", message: message)
+} else if thresholdSkipped {
+    Notifier.post(
+        title: "Crumb",
+        message: "Auto-clean overgeslagen: \(autoCleanCandidates.count) veilige cookies, drempel is \(autoCleanSettings.minSafeCookies)."
+    )
 }
 
 struct AgentSummary: Codable {

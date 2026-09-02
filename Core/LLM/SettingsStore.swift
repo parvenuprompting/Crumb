@@ -26,6 +26,20 @@ final class SettingsStore: ObservableObject {
     @Published var autoCleanMinAgeDays: Int {
         didSet { defaults.set(autoCleanMinAgeDays, forKey: "autoCleanMinAgeDays") }
     }
+    @Published var autoCleanMaxPerRun: Int {
+        didSet { defaults.set(autoCleanMaxPerRun, forKey: "autoCleanMaxPerRun") }
+    }
+    @Published var autoCleanMinSafeCookies: Int {
+        didSet { defaults.set(autoCleanMinSafeCookies, forKey: "autoCleanMinSafeCookies") }
+    }
+
+    @Published var agentIntervalHours: Int {
+        didSet { defaults.set(agentIntervalHours, forKey: "agentIntervalHours") }
+    }
+
+    @Published var backupRetentionDays: Int {
+        didSet { defaults.set(backupRetentionDays, forKey: "backupRetentionDays") }
+    }
 
     private let defaults: UserDefaults
 
@@ -38,6 +52,10 @@ final class SettingsStore: ObservableObject {
         autoCleanMarketingTracking = defaults.bool(forKey: "autoCleanMarketingTracking")
         autoCleanAnalytics = defaults.bool(forKey: "autoCleanAnalytics")
         autoCleanMinAgeDays = defaults.object(forKey: "autoCleanMinAgeDays") as? Int ?? 30
+        autoCleanMaxPerRun = defaults.object(forKey: "autoCleanMaxPerRun") as? Int ?? 100
+        autoCleanMinSafeCookies = defaults.object(forKey: "autoCleanMinSafeCookies") as? Int ?? 0
+        agentIntervalHours = defaults.object(forKey: "agentIntervalHours") as? Int ?? 3
+        backupRetentionDays = defaults.object(forKey: "backupRetentionDays") as? Int ?? 90
     }
 
     func refreshOllamaStatus() async {

@@ -22,7 +22,7 @@ enum LaunchAgentManager {
         FileManager.default.fileExists(atPath: plistURL.path)
     }
 
-    static func install() throws {
+    static func install(intervalHours: Int = 3) throws {
         guard let agentBinaryURL, FileManager.default.fileExists(atPath: agentBinaryURL.path) else {
             throw CookieScanError.readFailed("CrumbAgent-binary niet gevonden in de app-bundle.")
         }
@@ -35,16 +35,24 @@ enum LaunchAgentManager {
 
         let plist = plistContents(
             agentBinaryPath: agentBinaryURL.path,
-            logPath: agentLogURL.path
+            logPath: agentLogURL.path,
+            intervalHours: intervalHours
         )
         try plist.write(to: plistURL, atomically: true, encoding: .utf8)
         _ = runLaunchctl(["bootstrap", "gui/\(getuid())", plistURL.path])
             ?? runLaunchctl(["load", plistURL.path])
     }
 
+    /// Herinstalleert met een nieuw interval (roept zelf bootout/unload aan).
+    static func reinstall(intervalHours: Int) throws {
+        uninstall()
+        try install(intervalHours: intervalHours)
+    }
+
     /// Plist-inhoud als pure functie — testbaar zonder te installeren.
-    static func plistContents(agentBinaryPath: String, logPath: String) -> String {
-        """
+    static func plistContents(agentBinaryPath: String, logPath: String, intervalHours: Int = 3) -> String {
+        let intervalSeconds = max(1, intervalHours) * 3600
+        return """
         <?xml version="1.0" encoding="UTF-8"?>
         <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
         <plist version="1.0">
@@ -58,7 +66,7 @@ enum LaunchAgentManager {
             <key>RunAtLoad</key>
             <true/>
             <key>StartInterval</key>
-            <integer>10800</integer>
+            <integer>\(intervalSeconds)</integer>
             <key>StandardOutPath</key>
             <string>\(logPath)</string>
             <key>StandardErrorPath</key>

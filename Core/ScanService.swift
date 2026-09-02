@@ -91,6 +91,7 @@ final class ScanService: ObservableObject {
         let settings = SettingsStore.shared
         let whitelist = Set(WhitelistStore.load().domains.map(WhitelistStore.normalizedDomain))
         let protectedCookies = Set(ProtectedCookieStore.load().keys)
+        let domainRules = DomainRulesStore.load().rules
         let ollamaEnabled = settings.ollamaEnabled
         let ollamaModel = settings.ollamaModel
 
@@ -133,7 +134,8 @@ final class ScanService: ObservableObject {
             whitelist: whitelist,
             trackerList: trackerList,
             now: startedAt,
-            protectedCookies: protectedCookies
+            protectedCookies: protectedCookies,
+            domainRules: domainRules
         )
         phase = .checkingSafelist
 
@@ -159,7 +161,10 @@ final class ScanService: ObservableObject {
 
         // Onderhoud: rapporten en back-ups niet onbeperkt laten groeien.
         try? JSONRunLog.deleteLogs(olderThan: Self.retentionInterval)
-        try? CookieBackupStore.deleteBackups(olderThan: Self.retentionInterval)
+        let backupRetention = TimeInterval(max(0, settings.backupRetentionDays)) * 86_400
+        if backupRetention > 0 {
+            try? CookieBackupStore.deleteBackups(olderThan: backupRetention)
+        }
     }
 
     nonisolated static let retentionInterval: TimeInterval = 90 * 24 * 60 * 60
@@ -277,7 +282,8 @@ final class ScanService: ObservableObject {
         whitelist: Set<String>,
         trackerList: TrackerList,
         now: Date,
-        protectedCookies: Set<String> = []
+        protectedCookies: Set<String> = [],
+        domainRules: [DomainRule] = []
     ) async -> [CookieRecord] {
         let safelist = SafelistEngine(whitelist: whitelist, protectedCookies: protectedCookies)
         let engine = RuleEngine(trackerList: trackerList, now: now)
@@ -338,7 +344,7 @@ final class ScanService: ObservableObject {
                 reasoning = outcome.reasoning
             }
 
-            records.append(CookieRecord(
+            var finalRecord = CookieRecord(
                 domain: raw.domain,
                 name: raw.name,
                 valueHash: raw.valueHash ?? Hashing.cookieValueHash(domain: raw.domain, name: raw.name, path: raw.path),
@@ -355,7 +361,19 @@ final class ScanService: ObservableObject {
                 reasoning: reasoning,
                 protection: protection,
                 valueChurn: churn > 0 ? churn : nil
-            ))
+            )
+
+            // Domeinregels worden bovenop de bestaande classificatie toegepast;
+            // de safelist (locked) wint altijd.
+            if !domainRules.isEmpty {
+                let ruleOutcome = DomainRulesEngine.apply(domainRules, to: finalRecord, now: now)
+                if let p = ruleOutcome.protection { finalRecord.protection = p }
+                if let c = ruleOutcome.category { finalRecord.category = c }
+                if let v = ruleOutcome.verdict { finalRecord.verdict = v }
+                if let r = ruleOutcome.reasoning { finalRecord.reasoning = r }
+            }
+
+            records.append(finalRecord)
         }
 
         try? snapshot.save()
