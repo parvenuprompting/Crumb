@@ -33,7 +33,18 @@ enum LaunchAgentManager {
             withIntermediateDirectories: true
         )
 
-        let plist = """
+        let plist = plistContents(
+            agentBinaryPath: agentBinaryURL.path,
+            logPath: agentLogURL.path
+        )
+        try plist.write(to: plistURL, atomically: true, encoding: .utf8)
+        _ = runLaunchctl(["bootstrap", "gui/\(getuid())", plistURL.path])
+            ?? runLaunchctl(["load", plistURL.path])
+    }
+
+    /// Plist-inhoud als pure functie — testbaar zonder te installeren.
+    static func plistContents(agentBinaryPath: String, logPath: String) -> String {
+        """
         <?xml version="1.0" encoding="UTF-8"?>
         <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
         <plist version="1.0">
@@ -42,22 +53,19 @@ enum LaunchAgentManager {
             <string>\(label)</string>
             <key>ProgramArguments</key>
             <array>
-                <string>\(agentBinaryURL.path)</string>
+                <string>\(agentBinaryPath)</string>
             </array>
             <key>RunAtLoad</key>
             <true/>
             <key>StartInterval</key>
             <integer>10800</integer>
             <key>StandardOutPath</key>
-            <string>\(agentLogURL.path)</string>
+            <string>\(logPath)</string>
             <key>StandardErrorPath</key>
-            <string>\(agentLogURL.path)</string>
+            <string>\(logPath)</string>
         </dict>
         </plist>
         """
-        try plist.write(to: plistURL, atomically: true, encoding: .utf8)
-        _ = runLaunchctl(["bootstrap", "gui/\(getuid())", plistURL.path])
-            ?? runLaunchctl(["load", plistURL.path])
     }
 
     static func uninstall() {

@@ -19,7 +19,9 @@ enum Notifier {
         }
     }
 
-    private static func escaped(_ input: String) -> String {
+    /// Escapet de notificatietekst voor osascript: aanhalingstekens worden
+    /// enkele quotes, backslashes verdwijnen.
+    static func escaped(_ input: String) -> String {
         input
             .replacingOccurrences(of: "\\", with: "")
             .replacingOccurrences(of: "\"", with: "'")

@@ -198,14 +198,26 @@ struct OllamaClient: Sendable {
         }
         struct Wrapper: Codable { let cookies: [JudgementDTO] }
 
-        guard let start = content.firstIndex(of: "{"), let end = content.lastIndex(of: "}") else {
-            return []
-        }
-        let json = String(content[start...end])
-        let wrapper = (try? JSONDecoder().decode(Wrapper.self, from: Data(json.utf8)))
-            ?? (try? JSONDecoder().decode([JudgementDTO].self, from: Data(json.utf8)))
+        let decoder = JSONDecoder()
+
+        // 1. Het volledige antwoord direct decoderen (wrapper of kale array —
+        //    een slice van eerste '{' tot laatste '}' zou een array kapotsnijden).
+        let direct = (try? decoder.decode(Wrapper.self, from: Data(content.utf8)))
+            ?? (try? decoder.decode([JudgementDTO].self, from: Data(content.utf8)))
                 .map { Wrapper(cookies: $0) }
-        guard let cookies = wrapper?.cookies else { return [] }
+
+        // 2. Fallback: JSON extraheren uit een antwoord met extra tekst eromheen.
+        let sliced: Wrapper? = {
+            guard let start = content.firstIndex(of: "{"), let end = content.lastIndex(of: "}") else {
+                return nil
+            }
+            let json = String(content[start...end])
+            return (try? decoder.decode(Wrapper.self, from: Data(json.utf8)))
+                ?? (try? decoder.decode([JudgementDTO].self, from: Data(json.utf8)))
+                    .map { Wrapper(cookies: $0) }
+        }()
+
+        guard let cookies = direct?.cookies ?? sliced?.cookies else { return [] }
 
         return cookies.compactMap { dto in
             guard let verdictRaw = dto.verdict, let verdict = LLMVerdict(raw: verdictRaw) else { return nil }

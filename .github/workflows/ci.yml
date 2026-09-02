@@ -24,3 +24,30 @@ jobs:
             -destination 'platform=macOS' \
             CODE_SIGNING_ALLOWED=NO \
             test | xcpretty || exit 1
+
+  release:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate project
+        run: xcodegen generate
+
+      - name: Release build (unsigned)
+        run: |
+          xcodebuild -project Crumb.xcodeproj -scheme Crumb \
+            -configuration Release -destination 'platform=macOS' \
+            -derivedDataPath build/DerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            build | xcpretty || exit 1
+
+      - name: Ad-hoc sign and verify bundle structure
+        run: |
+          APP="build/DerivedData/Build/Products/Release/Crumb.app"
+          codesign --force --deep --sign - "$APP"
+          codesign --verify --deep --strict "$APP"
+          test -x "$APP/Contents/MacOS/CrumbAgent"
+          test -f "$APP/Contents/Resources/tracker-domains.txt"
