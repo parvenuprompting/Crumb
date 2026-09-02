@@ -262,6 +262,9 @@ struct CookieRow: View {
                     Text("vervalt: \(expiry.formatted(date: .numeric, time: .omitted))")
                 }
                 Text("eerst gezien: \(record.firstSeen.formatted(date: .numeric, time: .omitted))")
+                if let churn = record.valueChurn, churn > 0 {
+                    Text("waarde \(churn)× ververst")
+                }
                 if record.protection.isLocked {
                     Text("SAFELIST")
                         .font(.caption2.weight(.bold))

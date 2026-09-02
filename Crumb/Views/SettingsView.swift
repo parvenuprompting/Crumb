@@ -4,6 +4,7 @@ struct SettingsView: View {
     @EnvironmentObject private var whitelist: WhitelistModel
     @EnvironmentObject private var settings: SettingsStore
     @State private var newDomain = ""
+    @State private var whitelistNotice: String?
     @State private var agentStatusChecked = false
     @State private var agentInstalled = false
     @State private var auditEntries: [AuditEntry] = []
@@ -43,6 +44,12 @@ struct SettingsView: View {
                     .onSubmit(addDomain)
                 Button("Toevoegen") { addDomain() }
                     .disabled(newDomain.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+
+            if let whitelistNotice {
+                Text(whitelistNotice)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             if whitelist.domains.isEmpty {
@@ -210,7 +217,11 @@ struct SettingsView: View {
     }
 
     private func addDomain() {
-        whitelist.add(newDomain)
-        newDomain = ""
+        if let error = whitelist.add(newDomain) {
+            whitelistNotice = error
+        } else {
+            whitelistNotice = nil
+            newDomain = ""
+        }
     }
 }

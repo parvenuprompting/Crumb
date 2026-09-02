@@ -116,3 +116,76 @@ final class SafelistEngineTests: XCTestCase {
         XCTAssertEqual(justOutside, .none)
     }
 }
+
+final class WhitelistNormalizationTests: XCTestCase {
+    func testURLInputIsReducedToHost() {
+        XCTAssertEqual(WhitelistStore.normalizedDomain("https://bank.nl/login"), "bank.nl")
+        XCTAssertEqual(WhitelistStore.normalizedDomain("https://www.bank.nl/x?y=1#z"), "bank.nl")
+        XCTAssertEqual(WhitelistStore.normalizedDomain("bank.nl/foo"), "bank.nl")
+        XCTAssertEqual(WhitelistStore.normalizedDomain("bank.nl/"), "bank.nl")
+        XCTAssertEqual(WhitelistStore.normalizedDomain("http://ing.nl:443"), "ing.nl")
+        XCTAssertEqual(WhitelistStore.normalizedDomain("ing.nl:8080"), "ing.nl")
+    }
+
+    func testCasingDotsAndWhitespace() {
+        XCTAssertEqual(WhitelistStore.normalizedDomain("WWW.Example.COM"), "example.com")
+        XCTAssertEqual(WhitelistStore.normalizedDomain(".adnxs.com"), "adnxs.com")
+        XCTAssertEqual(WhitelistStore.normalizedDomain("  ing.nl  "), "ing.nl")
+        XCTAssertEqual(WhitelistStore.normalizedDomain("ing.nl"), "ing.nl")
+        XCTAssertEqual(WhitelistStore.normalizedDomain(""), "")
+    }
+
+    func testIPv6HostIsNotBroken() {
+        XCTAssertEqual(WhitelistStore.normalizedDomain("fe80::1"), "fe80::1")
+    }
+
+    func testValidation() {
+        XCTAssertTrue(WhitelistStore.isValidWhitelistDomain("bank.nl"))
+        XCTAssertFalse(WhitelistStore.isValidWhitelistDomain(""))
+        XCTAssertFalse(WhitelistStore.isValidWhitelistDomain("notadomain"))
+        XCTAssertFalse(WhitelistStore.isValidWhitelistDomain("bank.nl/foo"))
+        XCTAssertFalse(WhitelistStore.isValidWhitelistDomain("bank.nl:443"))
+        XCTAssertFalse(WhitelistStore.isValidWhitelistDomain("bank .nl"))
+    }
+}
+
+@MainActor
+final class WhitelistModelTests: XCTestCase {
+    override func setUp() {
+        super.setUp()
+        WhitelistStore.overrideFileURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("crumb-tests-whitelist-\(UUID().uuidString).json")
+    }
+
+    override func tearDown() {
+        try? FileManager.default.removeItem(at: WhitelistStore.fileURL)
+        WhitelistStore.overrideFileURL = nil
+        super.tearDown()
+    }
+
+    func testAddNormalizesURLInput() {
+        let model = WhitelistModel()
+        XCTAssertNil(model.add("https://bank.nl/login"))
+        XCTAssertTrue(model.domains.contains("bank.nl"))
+    }
+
+    func testAddRejectsInputWithoutDomain() {
+        let model = WhitelistModel()
+        XCTAssertNotNil(model.add("notadomain"))
+        XCTAssertNotNil(model.add("   "))
+        XCTAssertTrue(model.domains.isEmpty)
+    }
+
+    func testAddAcceptsURLWithPath() {
+        let model = WhitelistModel()
+        XCTAssertNil(model.add("bank.nl/foo"))
+        XCTAssertEqual(model.domains, ["bank.nl"])
+    }
+
+    func testAddRejectsDuplicateAfterNormalization() {
+        let model = WhitelistModel()
+        XCTAssertNil(model.add("bank.nl"))
+        XCTAssertNotNil(model.add("www.bank.nl"))
+        XCTAssertEqual(model.domains, ["bank.nl"])
+    }
+}

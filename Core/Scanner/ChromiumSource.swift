@@ -58,6 +58,7 @@ struct ChromiumSource: CookieSource {
         var select = ["host_key", "name", "path", "is_secure", "is_httponly", "expires_utc"]
         var hasPersistent = false
         var hasCreation = false
+        var hasEncryptedValue = false
         if columns.contains("is_persistent") {
             select.append("is_persistent")
             hasPersistent = true
@@ -65,6 +66,10 @@ struct ChromiumSource: CookieSource {
         if columns.contains("creation_utc") {
             select.append("creation_utc")
             hasCreation = true
+        }
+        if columns.contains("encrypted_value") {
+            select.append("encrypted_value")
+            hasEncryptedValue = true
         }
 
         let rows = try db.query("SELECT \(select.joined(separator: ", ")) FROM cookies")
@@ -80,6 +85,10 @@ struct ChromiumSource: CookieSource {
                 ? Self.dateFromChromiumEpoch(row["creation_utc"]?.intValue ?? 0)
                 : nil
 
+            // Alleen de versleutelde waarde hashen — de inhoud blijft onleesbaar.
+            let encryptedBlob = hasEncryptedValue ? (row["encrypted_value"]?.blobValue ?? Data()) : Data()
+            let valueHash: String? = encryptedBlob.isEmpty ? nil : Hashing.shortHash(encryptedBlob)
+
             return RawCookie(
                 domain: Self.normalizedDomain(domain),
                 name: name,
@@ -88,7 +97,8 @@ struct ChromiumSource: CookieSource {
                 creation: creation,
                 isSecure: (row["is_secure"]?.intValue ?? 0) != 0,
                 isHttpOnly: (row["is_httponly"]?.intValue ?? 0) != 0,
-                isSessionOnly: isSessionOnly
+                isSessionOnly: isSessionOnly,
+                valueHash: valueHash
             )
         }
     }

@@ -3,10 +3,13 @@ import Foundation
 struct WhitelistStore: Codable, Sendable {
     var domains: [String] = []
 
+    /// Test-seam: laat tests naar een tijdelijk bestand schrijven.
+    static var overrideFileURL: URL?
+
     static var fileURL: URL {
-        let base = FileManager.default.homeDirectoryForCurrentUser
+        overrideFileURL ?? FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Application Support/Crumb", isDirectory: true)
-        return base.appendingPathComponent("whitelist.json")
+            .appendingPathComponent("whitelist.json")
     }
 
     static func load() -> WhitelistStore {
@@ -25,10 +28,44 @@ struct WhitelistStore: Codable, Sendable {
         try encoder.encode(self).write(to: Self.fileURL, options: .atomic)
     }
 
+    /// Brengt willekeurige gebruikersinvoer terug tot een kaal domein:
+    /// scheme, pad, query, poort, volledige hoofdletters en `www.` verdwijnen.
+    /// Invoer zoals `https://bank.nl/login`, `bank.nl:443` of `WWW.Example.COM`
+    /// wordt allemaal `bank.nl` / `example.com`.
     static func normalizedDomain(_ input: String) -> String {
-        var domain = input.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        if domain.hasPrefix("www.") { domain = String(domain.dropFirst(4)) }
-        return domain
+        var raw = input.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !raw.isEmpty else { return "" }
+
+        // URL-achtige invoer (scheme, pad, query, anchor) terugbrengen tot de host.
+        if raw.contains("/") || raw.contains("?") || raw.contains("#") {
+            var candidate = raw
+            if !candidate.contains("://") { candidate = "https://" + candidate }
+            if let url = URL(string: candidate), let host = url.host, !host.isEmpty {
+                raw = host
+            }
+        }
+
+        // Poort eraf, maar alleen als het echt een poortnummer is (IPv6 niet breken).
+        if let colonIndex = raw.firstIndex(of: ":") {
+            let after = raw[raw.index(after: colonIndex)...]
+            if !after.isEmpty, after.allSatisfy(\.isNumber) {
+                raw = String(raw[..<colonIndex])
+            }
+        }
+
+        if raw.hasPrefix(".") { raw = String(raw.dropFirst()) }
+        if raw.hasPrefix("www.") { raw = String(raw.dropFirst(4)) }
+        return raw
+    }
+
+    /// Minimale sanity-check voor whitelist-invoer: een domein heeft minstens
+    /// één punt en geen pad-, poort- of spatietekens.
+    static func isValidWhitelistDomain(_ domain: String) -> Bool {
+        guard !domain.isEmpty else { return false }
+        return domain.contains(".")
+            && !domain.contains("/")
+            && !domain.contains(":")
+            && !domain.contains(" ")
     }
 }
 

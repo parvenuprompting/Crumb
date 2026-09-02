@@ -234,7 +234,14 @@ final class ScanService: ObservableObject {
             if let seen = snapshot.entries[browserAgnosticID] {
                 firstSeen = seen.firstSeen
             }
-            snapshot.recordLastSeen(browserAgnosticID, at: now, firstSeenFallback: firstSeen)
+            snapshot.recordObservation(
+                browserAgnosticID,
+                browser: raw.browser,
+                valueHash: raw.valueHash,
+                at: now,
+                firstSeenFallback: firstSeen
+            )
+            let churn = snapshot.entries[browserAgnosticID]?.churnCounts?[raw.browser] ?? 0
 
             var category = classified.category
             var verdict = classified.verdict
@@ -264,7 +271,7 @@ final class ScanService: ObservableObject {
             records.append(CookieRecord(
                 domain: raw.domain,
                 name: raw.name,
-                valueHash: Hashing.cookieValueHash(domain: raw.domain, name: raw.name, path: raw.path),
+                valueHash: raw.valueHash ?? Hashing.cookieValueHash(domain: raw.domain, name: raw.name, path: raw.path),
                 browser: raw.browser,
                 path: raw.path,
                 expiry: raw.expiry,
@@ -276,7 +283,8 @@ final class ScanService: ObservableObject {
                 category: category,
                 verdict: verdict,
                 reasoning: reasoning,
-                protection: protection
+                protection: protection,
+                valueChurn: churn > 0 ? churn : nil
             ))
         }
 

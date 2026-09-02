@@ -24,6 +24,11 @@ enum SQLiteValue {
         if case .text(let v) = self { return v }
         return nil
     }
+
+    var blobValue: Data? {
+        if case .blob(let v) = self { return v }
+        return nil
+    }
 }
 
 final class SQLiteDatabase {

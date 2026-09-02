@@ -67,13 +67,22 @@ final class WhitelistModel: ObservableObject {
             .sorted()
     }
 
-    func add(_ input: String) {
+    /// Voegt een domein toe na normalisatie. Geeft nil terug bij succes,
+    /// anders een foutmelding voor de UI.
+    @discardableResult
+    func add(_ input: String) -> String? {
         let domain = WhitelistStore.normalizedDomain(input)
-        guard !domain.isEmpty, !domains.contains(domain) else { return }
+        guard WhitelistStore.isValidWhitelistDomain(domain) else {
+            return "Voer een geldig domein in zoals 'bank.nl'."
+        }
+        guard !domains.contains(domain) else {
+            return "'\(domain)' staat al op de whitelist."
+        }
         var store = WhitelistStore.load()
         store.domains.append(domain)
         try? store.save()
         reload()
+        return nil
     }
 
     func remove(_ domain: String) {

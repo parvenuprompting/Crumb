@@ -53,6 +53,8 @@ enum CookieProtection: Codable, Hashable, Sendable {
 struct CookieRecord: Identifiable, Codable, Hashable, Sendable {
     let domain: String
     let name: String
+    /// Bij Chromium de hash van de encrypted_value-blob (zonder te ontsleutelen);
+    /// anders een identiteits-hash over domein|naam|pad.
     let valueHash: String
     let browser: String
     let path: String
@@ -66,6 +68,9 @@ struct CookieRecord: Identifiable, Codable, Hashable, Sendable {
     var verdict: CookieVerdict
     var reasoning: String
     var protection: CookieProtection
+    /// Aantal keer dat de cookie-waarde (per browser) is veranderd sinds de
+    /// eerste waarneming. nil bij cookies waarvoor geen waarde-hash beschikbaar is.
+    var valueChurn: Int? = nil
 
     var id: String {
         CookieRecord.identity(browser: browser, domain: domain, name: name, path: path)
@@ -86,6 +91,9 @@ struct RawCookie: Sendable {
     var isHttpOnly: Bool
     var isSessionOnly: Bool
     var browser: String = ""
+    /// Hash van de versleutelde cookie-waarde (Chromium), indien beschikbaar —
+    /// de waarde zelf wordt nooit gelezen.
+    var valueHash: String? = nil
     var aiCategory: CookieCategory?
     var aiVerdict: LLMVerdict?
     var aiReasoning: String?
