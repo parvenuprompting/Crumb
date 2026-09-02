@@ -32,7 +32,8 @@ targets:
       path: Crumb/Info.plist
       properties:
         CFBundleDisplayName: Crumb
-        LSUIElement: true
+        CFBundleIconFile: AppIcon
+        LSUIElement: false
         NSPrincipalClass: NSApplication
         NSHighResolutionCapable: true
     settings:

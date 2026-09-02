@@ -27,7 +27,7 @@ Lokale, privacy-first cookie-manager voor macOS. Leest browser-cookies op het sy
 ## Architectuur
 
 ```
-Crumb.app (SwiftUI, menu bar, non-sandboxed)
+Crumb.app (SwiftUI, Dock + menu bar, non-sandboxed)
 ├── Core/
 │   ├── Scanner/          CookieSource-protocol: ChromiumSource, SafariSource, FirefoxSource
 │   ├── Categorization/   RuleEngine + gebundelde tracker-domeinenlijst
@@ -37,11 +37,15 @@ Crumb.app (SwiftUI, menu bar, non-sandboxed)
 │   ├── Scheduling/       LaunchAgentManager (RunAtLoad + 3-uurlijkse StartInterval)
 │   ├── Logging/          JSONRunLog per run
 │   └── Model/            CookieRecord, ScanRun, SnapshotStore
-├── Crumb/Views/          Overzicht / Cookies / Trends / Instellingen (monochroom)
+├── Crumb/
+│   ├── Views/            Overzicht / Cookies / Trends / Instellingen (monochroom)
+│   └── Resources/        AppIcon.icns + tracker-domeinenlijst
 └── CrumbAgent            CLI-binary in de app-bundle voor de launchd-agent
 ```
 
-## Builden
+## Builden & Installeren
+
+Project genereren en bouwen:
 
 ```bash
 brew install xcodegen
@@ -49,15 +53,24 @@ xcodegen generate
 open Crumb.xcodeproj   # of: xcodebuild -scheme Crumb build
 ```
 
-Tests:
+Tests draaien:
 
 ```bash
 xcodebuild -scheme Crumb test -destination 'platform=macOS'
 ```
 
+Lokaal installeren in `/Applications`:
+
+```bash
+xcodebuild -project Crumb.xcodeproj -scheme Crumb -configuration Release -derivedDataPath build/DerivedData build
+codesign --force --deep --sign "Apple Development" build/DerivedData/Build/Products/Release/Crumb.app
+cp -R build/DerivedData/Build/Products/Release/Crumb.app /Applications/
+rm -rf build/
+```
+
 ## First run
 
-1. Start Crumb — het menu-barpictogram (gestippelde cirkel) verschijnt en de eerste scan begint direct.
+1. Start Crumb — het hoofdvenster opent direct, de app verschijnt in het Dock en het menu-barpictogram (gestippelde cirkel) verschijnt rechtsboven terwijl de eerste scan direct begint. Sluit je het venster, dan blijft Crumb actief in de menubalk.
 2. Safari vereist **Volledige Schijftoegang**: Systeeminstellingen → Privacy & Beveiliging → Volledige Schijftoegang → voeg Crumb toe → herstart Crumb. De app linkt hier naartoe in het Overzicht.
 3. Voor AI-classificatie: installeer [Ollama](https://ollama.com) en trek een model, bijvoorbeeld `ollama pull llama3.1:8b`. Zonder Ollama draait alles op de regel-laag; het rapport vermeldt dan expliciet dat AI is overgeslagen.
 

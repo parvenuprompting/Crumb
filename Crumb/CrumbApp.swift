@@ -9,16 +9,6 @@ struct CrumbApp: App {
     @StateObject private var history = RunHistoryModel()
 
     var body: some Scene {
-        MenuBarExtra("Crumb", systemImage: "circle.dotted") {
-            MenuPanelView()
-                .environmentObject(scanService)
-                .environmentObject(whitelist)
-                .environmentObject(settings)
-                .environmentObject(history)
-                .tint(.primary)
-        }
-        .menuBarExtraStyle(.window)
-
         Window("Crumb", id: "main") {
             MainContentView()
                 .frame(minWidth: 860, minHeight: 580)
@@ -29,15 +19,36 @@ struct CrumbApp: App {
                 .tint(.primary)
         }
         .defaultSize(width: 960, height: 640)
+
+        MenuBarExtra("Crumb", systemImage: "circle.dotted") {
+            MenuPanelView()
+                .environmentObject(scanService)
+                .environmentObject(whitelist)
+                .environmentObject(settings)
+                .environmentObject(history)
+                .tint(.primary)
+        }
+        .menuBarExtraStyle(.window)
     }
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         guard ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil else { return }
+        NSApp.activate(ignoringOtherApps: true)
         Task { @MainActor in
             await ScanService.shared.runScan()
         }
+    }
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        sender.activate(ignoringOtherApps: true)
+        if !flag {
+            if let window = sender.windows.first(where: { $0.canBecomeMain }) {
+                window.makeKeyAndOrderFront(self)
+            }
+        }
+        return true
     }
 }
 
