@@ -7,7 +7,7 @@ Lokale, privacy-first cookie-manager voor macOS. Leest browser-cookies op het sy
 ![Swift](https://img.shields.io/badge/swift-5.10-orange)
 ![Ollama](https://img.shields.io/badge/AI-lokaal%20via%20Ollama-8B5CF6)
 ![Privacy](https://img.shields.io/badge/privacy-100%25%20lokaal-success)
-![License](https://img.shields.io/badge/license-TBD-lightgrey)
+![License](https://img.shields.io/badge/license-MIT-blue)
 
 ## Kernprincipes
 
@@ -139,3 +139,10 @@ Het script bouwt Release, tekent met hardened runtime (inclusief de embedded `Cr
 - [x] Fase 10 — Vertrouwen & inzichten: onboarding, dashboard met impact-gesorteerde aanbevelingen, cookie-detailpaneel, verklarende adviezen, scanvoortgang, domeinregels, auto-clean dry-run/limiet/drempel, instelbare planning, audit-log filteren/exporteren, privacy-score, cross-browser duplicaten, nieuw/verdwijnen-diff, handmatige cookie-bescherming
 - [x] Fase 9 — Homepage met interactieve snelkeuzes voor 1-klik opschonen
 
+## Over de maker
+
+Ik ben Tiëndo, vrachtwagenchauffeur. Ik bouw dit project in mijn eentje, in de avonden naast fulltime werk. Vragen? Open een issue.
+
+## Licentie
+
+Dit project is gelicentieerd onder de [MIT-licentie](LICENSE).

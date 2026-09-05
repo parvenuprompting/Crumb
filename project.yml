@@ -67,7 +67,7 @@ schemes:
     build:
       targets:
         Crumb: all
-        CrumbAgent: [build]
+        CrumbAgent: all
         CrumbTests: [test]
     run:
       config: Debug

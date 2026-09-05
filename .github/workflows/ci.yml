@@ -8,7 +8,7 @@ on:
 
 jobs:
   test:
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
 
@@ -20,13 +20,14 @@ jobs:
 
       - name: Build and test
         run: |
+          set -o pipefail
           xcodebuild -project Crumb.xcodeproj -scheme Crumb \
             -destination 'platform=macOS' \
             CODE_SIGNING_ALLOWED=NO \
-            test | xcpretty || exit 1
+            test | xcpretty
 
   release:
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
 
@@ -38,11 +39,12 @@ jobs:
 
       - name: Release build (unsigned)
         run: |
+          set -o pipefail
           xcodebuild -project Crumb.xcodeproj -scheme Crumb \
             -configuration Release -destination 'platform=macOS' \
             -derivedDataPath build/DerivedData \
             CODE_SIGNING_ALLOWED=NO \
-            build | xcpretty || exit 1
+            build | xcpretty
 
       - name: Ad-hoc sign and verify bundle structure
         run: |
