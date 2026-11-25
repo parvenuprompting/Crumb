@@ -25,8 +25,19 @@ struct RuleEngine: Sendable {
         }
 
         let category = nonEssentialCategory(raw: raw)
+        // Een sessiecookie of een beveiligde cookie kan een inlog zijn. Die wordt nooit
+        // automatisch opgeruimd, ook niet als het domein in de trackerlijst staat —
+        // dan hooguit 'review'. (Tweede bevinding van de keurmeester, 25-11-2026.)
+        let lijktOpInlog = raw.isSessionOnly || raw.isHttpOnly
         switch category {
         case .marketingTracking:
+            if lijktOpInlog {
+                return (
+                    category,
+                    .reviewSuggested,
+                    "Tracking-domein, maar dit cookie is sessiegebonden of beveiligd en kan een inlog zijn — daarom review in plaats van automatisch opruimen."
+                )
+            }
             return (
                 category,
                 .safeToClean,
@@ -34,6 +45,9 @@ struct RuleEngine: Sendable {
             )
         case .analytics:
             if let creation = raw.creation, now.timeIntervalSince(creation) > Self.analyticsAgeThreshold {
+                if lijktOpInlog {
+                    return (category, .reviewSuggested, "Oude analytics, maar sessiegebonden of beveiligd — eerst review.")
+                }
                 return (category, .safeToClean, "Analytics-cookie ouder dan 30 dagen. De regellaag beslist dit zelf; recente analytics blijven staan.")
             }
             return (category, .keep, "Analytics-cookie, recent aangemaakt — nog bewaren.")

@@ -1,0 +1,39 @@
+{
+  "laag": 1,
+  "id": "gen-1795630194-yGReJCcchZ4FiaMxlpSL",
+  "model_gevraagd": "qwen/qwen3.7-flash",
+  "model_gekregen": "qwen/qwen3.7-flash",
+  "familie": "qwen",
+  "vonnis": "GEEN RISICO",
+  "ernst": "laag",
+  "created": 1795630194,
+  "seconden": 51.7,
+  "usage": {
+    "prompt_tokens": 1260,
+    "completion_tokens": 6000,
+    "total_tokens": 7260,
+    "cost": 0.0008178,
+    "is_byok": false,
+    "prompt_tokens_details": {
+      "cached_tokens": 0,
+      "cache_write_tokens": 0,
+      "audio_tokens": 0,
+      "video_tokens": 0
+    },
+    "cost_details": {
+      "upstream_inference_cost": 0.0008178,
+      "upstream_inference_prompt_cost": 3.78e-05,
+      "upstream_inference_completions_cost": 0.00078
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 5773,
+      "image_tokens": 0,
+      "audio_tokens": 0
+    }
+  },
+  "bestand": "Core/Categorization/RuleEngine.swift",
+  "bestand_sha256": "6aba039cc147ce78306dbc5531b78b9d117c3469bcd9b81f7c7b33a8928d10ba",
+  "vraag_sha256": "a4b8cf0e37e80a0fd5896a21a4b2033d4bb0dbc218514de14154f830e84baed9",
+  "antwoord_sha256": "35ef68247b09f3985a49dc670b9cc63321673b0b9ea71bf45fbb4e651c83cbd7",
+  "antwoord": "VONNIS: GEEN RISICO\nERNST: laag\n- [laag] waar: Core/Categorization/RuleEngine.swift:54-57 / wat: marketingTracking-pad naar .safeToClean / bewijs: expliciete `if lijktOpInlog { return .reviewSuggested }` blokkeert autodeletion; kans op verkeerd oordeel alleen wanneer beide vlaggen technisch afwezig zijn / fix: voeg naam-pattern check toe aan `lijktOpInlog` of valideer at runtime\n- [laag] waar: Core/Categorization/RuleEngine.swift:66-69 / wat: analytics-pad naar .safeToClean (ouder dan 30 dagen) / bewijs: identieke guard; `now.timeIntervalSince(creation)` passeert pas na threshold, maar `!lijktOpInlog` houdt login-cookies tegen / fix: centraliseer veiligheden in `nonEssentialCategory` of `provisionalCategory`\n- [laag] waar: Core/Categorization/"
+}

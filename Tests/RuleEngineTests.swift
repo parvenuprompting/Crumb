@@ -74,6 +74,18 @@ final class RuleEngineTests: XCTestCase {
         XCTAssertEqual(result.verdict, .keep)
     }
 
+    func testSessionLoginOnTrackerDomainIsReviewNotClean() {
+        // Tweede bevinding van de keurmeester (25-11-2026): een sessiecookie op een
+        // tracker-domein kan een inlog zijn (geen "onthoud mij"). Die mag nooit
+        // automatisch weg — review is het hoogste wat erin zit.
+        let result = engine.classify(
+            raw: raw(domain: "cdn.adnxs.com", name: "sess", isSessionOnly: true),
+            protection: .none
+        )
+        XCTAssertEqual(result.category, .marketingTracking)
+        XCTAssertEqual(result.verdict, .reviewSuggested)
+    }
+
     func testLockedProtectionOverridesTrackerClassification() {
         let result = engine.classify(
             raw: raw(domain: "adnxs.com", name: "uuid2"),
