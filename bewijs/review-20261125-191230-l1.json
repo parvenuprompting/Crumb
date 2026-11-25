@@ -1,0 +1,41 @@
+{
+  "laag": 1,
+  "id": "gen-1795630318-uC9xEXBectmHc5XlPXw7",
+  "model_gevraagd": "qwen/qwen3.7-flash",
+  "model_gekregen": "qwen/qwen3.7-flash",
+  "familie": "qwen",
+  "vonnis": "GEEN RISICO",
+  "ernst": "laag",
+  "created": 1795630318,
+  "seconden": 32.0,
+  "usage": {
+    "prompt_tokens": 1249,
+    "completion_tokens": 3890,
+    "total_tokens": 5139,
+    "cost": 0.00054317,
+    "is_byok": false,
+    "prompt_tokens_details": {
+      "cached_tokens": 0,
+      "cache_write_tokens": 0,
+      "audio_tokens": 0,
+      "video_tokens": 0
+    },
+    "cost_details": {
+      "upstream_inference_cost": 0.00054317,
+      "upstream_inference_prompt_cost": 3.747e-05,
+      "upstream_inference_completions_cost": 0.0005057
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 3571,
+      "image_tokens": 0,
+      "audio_tokens": 0
+    }
+  },
+  "bestand": "Core/Categorization/RuleEngine.swift",
+  "bestand_sha256": "6aba039cc147ce78306dbc5531b78b9d117c3469bcd9b81f7c7b33a8928d10ba",
+  "hashes": {},
+  "vraag_sha256": "50775d5900b84f8cc02628c1882ee451f948af76399d4a1a8105fa50f37353a1",
+  "antwoord_sha256": "d6a50a5045f10f0394db15aab8a202c7de96132cc222631638266c709bb0635b",
+  "hashes_ontbrekend": [],
+  "antwoord": "VONNIS: GEEN RISICO\nERNST: laag\n- [laag] waar: Core/Categorization/RuleEngine.swift:58-64 / wat: Prioriteitsvolgorde categorisering + `liktOpInlog`-valstreep / bewijs: `nonEssentialCategory` checkt eerst `isHttpOnly && isSecure && !isSessionOnly` (retourneert `.functional` => keep). Mocht een cookie desondanks door naam/domein toch naar `.marketingTracking` of `.analytics` vervallen, dan activeert `let lijktOpInlog = raw.isSessionOnly || raw.isHttpOnly` vrijwel gegarandeerd de `.reviewSuggested`-pad in `classify()`, waardoor `.safeToClean` ontoegankelijk blijft voor standaard auth-cookies. / fix: Huidige logica blokkeert foutief opruimen correct; geen code-aanpassing vereist. Veronderstelt wel conformiteit met browser/beveiligingsnormen waarin sessie-tokens altijd tenminste `HttpOnly` of `SessionOnly` zijn.\nNiet narekenbaar: Gedrag van niet-conforme authenticatiecookies die expliciet `HttpOnly=false` én `SessionOnly=false` combineren (theoretisch mogelijk maar zeldzaam), evenals de exacte runtime-matching van `trackerList.isTracker()` voor cross-subdomein of wildcard-domeinen die mogelijk andere categoriseringsroutes openen."
+}
