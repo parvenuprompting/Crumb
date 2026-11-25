@@ -1,0 +1,65 @@
+{
+  "id": "gen-1795631569-1pCvd1GQ4PVRKaIrCQcl",
+  "soort": "dienst",
+  "prompt": "/Users/tiendo/Projects/Agent-Brain/prompts/bibliotheek/audit-speciaal.md",
+  "sectie": "11.1",
+  "model_gevraagd": "qwen/qwen3.7-flash",
+  "model_gekregen": "qwen/qwen3.7-flash",
+  "familie": "qwen",
+  "created": 1795631569,
+  "seconden": 66.4,
+  "usage": {
+    "prompt_tokens": 28822,
+    "completion_tokens": 5824,
+    "total_tokens": 34646,
+    "cost": 0.00162178,
+    "is_byok": false,
+    "prompt_tokens_details": {
+      "cached_tokens": 0,
+      "cache_write_tokens": 0,
+      "audio_tokens": 0,
+      "video_tokens": 0
+    },
+    "cost_details": {
+      "upstream_inference_cost": 0.00162178,
+      "upstream_inference_prompt_cost": 0.00086466,
+      "upstream_inference_completions_cost": 0.00075712
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 5026,
+      "image_tokens": 0,
+      "audio_tokens": 0
+    }
+  },
+  "doel": "/Users/tiendo/Projects/Crumb",
+  "bestanden": [
+    "/Users/tiendo/Projects/Crumb/Agent/main.swift",
+    "/Users/tiendo/Projects/Crumb/Core/Categorization/RuleEngine.swift",
+    "/Users/tiendo/Projects/Crumb/Core/Categorization/TrackerList.swift",
+    "/Users/tiendo/Projects/Crumb/Core/Cleanup/AuditLog.swift",
+    "/Users/tiendo/Projects/Crumb/Core/Cleanup/AutoCleanEngine.swift",
+    "/Users/tiendo/Projects/Crumb/Core/Cleanup/CookieBackup.swift",
+    "/Users/tiendo/Projects/Crumb/Core/Cleanup/DeletionEngine.swift",
+    "/Users/tiendo/Projects/Crumb/Core/Cleanup/QuickCleanEngine.swift",
+    "/Users/tiendo/Projects/Crumb/Core/Exposure/ExposureLedger.swift",
+    "/Users/tiendo/Projects/Crumb/Core/Exposure/ExposureSource.swift",
+    "/Users/tiendo/Projects/Crumb/Core/Exposure/ExposureSyncClient.swift",
+    "/Users/tiendo/Projects/Crumb/Core/Exposure/RemovalRequest.swift",
+    "/Users/tiendo/Projects/Crumb/Core/Insights/InsightsEngine.swift",
+    "/Users/tiendo/Projects/Crumb/Core/Insights/RecommendationEngine.swift",
+    "/Users/tiendo/Projects/Crumb/Core/LLM/AIConsensus.swift",
+    "/Users/tiendo/Projects/Crumb/Core/LLM/OllamaClient.swift",
+    "/Users/tiendo/Projects/Crumb/Core/LLM/SettingsStore.swift",
+    "/Users/tiendo/Projects/Crumb/Core/Logging/JSONRunLog.swift",
+    "/Users/tiendo/Projects/Crumb/Core/Model/CookieRecord.swift",
+    "/Users/tiendo/Projects/Crumb/Core/Model/RunHistoryModel.swift",
+    "/Users/tiendo/Projects/Crumb/Core/Model/ScanRun.swift",
+    "/Users/tiendo/Projects/Crumb/Core/Safety/DomainRules.swift",
+    "/Users/tiendo/Projects/Crumb/Core/Safety/ProtectedCookieStore.swift",
+    "/Users/tiendo/Projects/Crumb/Core/Safety/ProtectionExplanation.swift",
+    "/Users/tiendo/Projects/Crumb/Core/Safety/RecommendedWhitelist.swift"
+  ],
+  "vraag_sha256": "f0c5d0037b70d1e5e9814da0a38b09ca84f4cf5e6b6621f88c506b62a6545785",
+  "antwoord_sha256": "707c00e83895be1df03569e866768bec8e33c9a42a48846f08abfbc31d096b9e",
+  "antwoord": "VONNIS: De codebase hanteert principieel sterke dataminimalisatie (hashen i.p.v. klaretekst, expliciete 90-dagenretentie voor rapporten/back-ups), maar vertoont risico’s op oneindig groeiende audit- en snapshotsystemen, het ongefilterd archiveren van volledige rijdata in back-ups en ontbrekende netwerkvalidatie bij persoonsgegevens-exchange.\n\nBEVINDINGEN\n- [ernst: belangrijk] waar: AuditLog.swift:static func append / wat: Auditlogboek groeit onbeperkt omdat geen leeftijdsgrens wordt toegepast op weggeschreven entries. / bewijs: `append()` voegt telkens JSONL-regels toe zonder de opslaglocatie te controleren op oud materiaal; `main.swift` purgeert alleen `JSONRunLog` en backups, niet `audit.jsonl`. / fix: Implementeer `AuditLog.deleteEntries(olderThan:)` en schedule deze uitvoering parallel aan het 90-dagenretentiebeleid van runlogs.\n- [ernst: blokkerend] waar: CookieBackup.swift:struct CookieBackupEntry & static func write / wat: Back-ups bevatten volledige database-rijen inclusief potentiële sessie- of auth-tokenwaarden, wat dataminimalisatie ondermijnt. / bewijs: `values: [String: BackupValue]` serialiseert ongefilterd `.text(String)` en `.blob(Data)` uit `captureRows(for:)`, terwijl de scanlaag bewust kiest voor `valueHash` i.p.v. originele cleartext. / fix: Filter `values` tijdens `captureRows` uit tot enkel noodzakelijke identiteitskolommen (host, name, path, expiry, secure) en excludeer expliciet kolommen met potentieel gevoelige waardeblobs.\n- [ernst: blokkerend] waar: ExposureSyncClient.swift:static let standaardZender & synchroniseer / wat: Het versturen van persoonlijke gegevens (gebruikersnaam, urls, notities) naar een eindpunt ontbreekt aan expliciete TLS-trustvalidatie of certificaatspinning. / bewijs: `URLSession.shared.dataTask` vertrouwt op de systeemdefault-configuratie zonder `NSURLAuthenticationChallengeSender` implementatie; de request body bevat `SpoorRecord.naam` (persoonlijke gegevens). / fix: Implementeer een custom `URLSessionDelegate` die `serverTrust` valideert (of pin het lokale Joker-host certificaat) en forceer protocol `.https` voordat het verzoek wordt geënt.\n- [ernst: belangrijk] waar: SnapshotStore.swift:static var fileURL & mutating func save / mat: De persistentieve snapshotgroei is niet begrensd, waardoor observatiegeschiedenis en churn-statistieken oneindig opschalen en schaalbaarheid/compliance in gevaar brengen. / bewijs: `entries[id]` accumuleert hashes en `churnCounts` zonder TTL of pruning-logica; geen overeenkomstige cleanup-functie aanwezig zoals bij runlogs. / fix: Introduceer een `mutating func prune(maxAge: days or maxEntries: count)` die oude entry's verwijdert en integreer deze in de terugkerende cleanup-routine van `main.swift`.\n\nWAT IK NIET KON NARECKENEN: Geen toegang tot de daadwerkelijke decryptiemethode achter `BackupValue.init(_: SQLiteValue)`; indien deze OS-keychain of hardware-backed sleutels omzeilt om cleartext sessietokens te extraheren, valt dit buiten de scope van deze statische audit maar vereist platform-specifieke hardening."
+}
