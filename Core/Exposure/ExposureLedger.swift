@@ -27,10 +27,12 @@ public struct ExposureEntry: Codable, Identifiable, Hashable, Sendable {
     public let deadline: Date
     public var status: ExposureStatus
     public var notitie: String
+    /// Laatste wijziging — bepaalt wie wint bij synchroniseren met het huis.
+    public var gewijzigd: Date?
 
     public init(id: UUID = UUID(), sourceID: String, sourceNaam: String, url: String,
                 gevondenOp: Date = Date(), deadline: Date, status: ExposureStatus = .gevonden,
-                notitie: String = "") {
+                notitie: String = "", gewijzigd: Date? = nil) {
         self.id = id
         self.sourceID = sourceID
         self.sourceNaam = sourceNaam
@@ -39,7 +41,11 @@ public struct ExposureEntry: Codable, Identifiable, Hashable, Sendable {
         self.deadline = deadline
         self.status = status
         self.notitie = notitie
+        self.gewijzigd = gewijzigd
     }
+
+    /// Wat de synchronisatie gebruikt: de laatste wijziging, of het moment van vinden.
+    public var laatstGewijzigd: Date { gewijzigd ?? gevondenOp }
 }
 
 /// De administratie van je eigen spoor: wat je vond, wat je verstuurde, wat
@@ -70,10 +76,17 @@ public final class ExposureLedger {
     public func zetStatus(id: UUID, _ status: ExposureStatus) {
         guard let i = entries.firstIndex(where: { $0.id == id }) else { return }
         entries[i].status = status
+        entries[i].gewijzigd = Date()
     }
 
     public func openstaand() -> [ExposureEntry] {
         entries.filter { !$0.status.isAfgehandeld }
+    }
+
+    /// Vervangt de hele lijst na een synchronisatie. Het huis is de baas over
+    /// de samenvoeging; de app schrijft op wat er terugkomt.
+    public func vervangAlles(_ nieuwe: [ExposureEntry]) {
+        entries = nieuwe
     }
 
     /// Sporen waarvan de wettelijke termijn (art. 12 lid 3) voorbij is.

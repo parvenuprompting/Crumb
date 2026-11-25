@@ -9,6 +9,7 @@ struct SporenView: View {
     @AppStorage("sporen.plaats") private var plaats = ""
     @State private var entries: [ExposureEntry] = []
     @State private var brief: BriefToon?
+    @State private var toonSync = false
 
     private var bestand: URL? { ExposureLedger.standaardBestand() }
     private var bronnen: [ExposureSource] { ExposureCatalog.bronnen }
@@ -33,6 +34,9 @@ struct SporenView: View {
         .task { laad() }
         .sheet(item: $brief) { inhoud in
             BriefSheet(brief: inhoud)
+        }
+        .sheet(isPresented: $toonSync) {
+            SporenSyncSheet(bestand: bestand) { laad() }
         }
     }
 
@@ -59,6 +63,9 @@ struct SporenView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
+                Button("Synchroniseer") { toonSync = true }
+                    .buttonStyle(.bordered)
+                    .help("Maak je lijst gelijk met het huis op je telefoon")
             }
             .padding(.top, 4)
         }
