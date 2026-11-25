@@ -102,6 +102,61 @@ struct SettingsView: View {
 
     // MARK: - Whitelist
 
+    /// Eén klik zet de dagelijkse diensten op de whitelist. Wat er al op staat
+    /// valt weg, zodat je alleen ziet wat je nog toevoegt.
+    private var recommendedWhitelistBlock: some View {
+        let ontbreekt = RecommendedWhitelist.missing(from: whitelist.domains)
+        return VStack(alignment: .leading, spacing: 8) {
+            if ontbreekt.isEmpty {
+                Label("Je dagelijkse diensten staan allemaal op de lijst.", systemImage: "checkmark.seal")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                HStack(spacing: 8) {
+                    Text("Dagelijkse diensten")
+                        .font(.callout.weight(.semibold))
+                    Button("Alles toevoegen (\(ontbreekt.count))") {
+                        addAllRecommended(ontbreekt)
+                    }
+                    .controlSize(.small)
+                }
+                LazyVGrid(
+                    columns: [GridItem(.adaptive(minimum: 168), spacing: 6)],
+                    alignment: .leading,
+                    spacing: 6
+                ) {
+                    ForEach(ontbreekt, id: \.self) { domain in
+                        Button {
+                            _ = whitelist.add(domain)
+                        } label: {
+                            HStack(spacing: 5) {
+                                Image(systemName: "plus")
+                                    .font(.system(size: 9, weight: .bold))
+                                Text(domain)
+                                    .font(.caption)
+                                    .monospaced()
+                            }
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(RoundedRectangle(cornerRadius: 6).fill(Color.primary.opacity(0.05)))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
+    }
+
+    private func addAllRecommended(_ domains: [String]) {
+        var fouten: [String] = []
+        for domain in domains {
+            if let melding = whitelist.add(domain) { fouten.append(melding) }
+        }
+        whitelistNotice = fouten.isEmpty
+            ? "\(domains.count) diensten beschermd — ze komen niet meer in een verwijderlijst."
+            : fouten.joined(separator: " ")
+    }
+
     private var whitelistSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             SectionHeader(title: "Whitelist — nooit wissen")
@@ -123,6 +178,8 @@ struct SettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+
+            recommendedWhitelistBlock
 
             HStack {
                 Button("Exporteren…") { exportWhitelist() }
