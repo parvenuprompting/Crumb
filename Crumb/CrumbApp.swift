@@ -33,6 +33,12 @@ struct CrumbApp: App {
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    /// macOS onthield dat het venster gesloten was (state restoration) en
+    /// opende bij de volgende start niets — dan leek Crumb kapot. Crumb heeft
+    /// één venster: dat hoort er bij elke start te staan.
+    func applicationShouldSaveSecureApplicationState(_ sender: NSApplication) -> Bool { false }
+    func applicationShouldRestoreSecureApplicationState(_ sender: NSApplication) -> Bool { false }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         guard ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil else { return }
         NSApp.activate(ignoringOtherApps: true)

@@ -36,7 +36,10 @@ final class ScanService: ObservableObject {
     @Published private(set) var liveSourceStatuses: [ScanSourceStatus] = []
     @Published private(set) var lastRun: ScanRun?
     @Published private(set) var lastError: String?
+    /// Voortgang van de AI-fase: hoeveel batches klaar zijn van het totaal.
+    @Published private(set) var aiProgress: (done: Int, total: Int)?
 
+    private var scanTask: Task<Void, Never>?
     private let fileManager = FileManager.default
 
     var sourceAvailability: [SourceAvailability] {
@@ -80,13 +83,43 @@ final class ScanService: ObservableObject {
         lastRun = JSONRunLog.lastRun()
     }
 
-    func runScan() async {
+    /// Start een scan als eigen taak, zodat hij te stoppen is.
+    func startScan(includeAI: Bool = true) {
+        guard scanTask == nil else { return }
+        scanTask = Task { @MainActor in
+            await runScan(includeAI: includeAI)
+            scanTask = nil
+        }
+    }
+
+    /// Stopt de lopende scan. De AI-batches die nog lopen zien de annulering
+    /// en breken af; wat al ingelezen is blijft staan, er wordt niets opgeslagen
+    /// alsof de run klaar was.
+    func cancelScan() {
+        scanTask?.cancel()
+        scanTask = nil
+        aiProgress = nil
+        isScanning = false
+        phase = .idle
+        lastError = "Scan gestopt."
+        // De uitslag die er al stond hoort bewaard te blijven, ook al is de
+        // taak geannuleerd: daarom een eigen taak die niet meegenomen wordt
+        // in de annulering.
+        if let run = lastRun {
+            Task.detached {
+                try? await ScanService.persist(run: run)
+            }
+        }
+    }
+
+    func runScan(includeAI: Bool = true) async {
         guard !isScanning else { return }
         isScanning = true
         lastError = nil
         liveSourceStatuses = []
+        aiProgress = nil
         phase = .detectingBrowsers
-        defer { isScanning = false; phase = .idle }
+        defer { isScanning = false; phase = .idle; aiProgress = nil }
 
         let settings = SettingsStore.shared
         let whitelist = Set(WhitelistStore.load().domains.map(WhitelistStore.normalizedDomain))
@@ -110,26 +143,11 @@ final class ScanService: ObservableObject {
         }
         var rawCookies = cookies
 
-        var aiUsed = false
-        var aiSkippedReason: String?
-        var aiClassified = 0
-
-        if ollamaEnabled {
-            phase = .aiClassification
-            let result = await Self.classifyWithAI(
-                rawCookies: rawCookies,
-                trackerList: trackerList,
-                model: ollamaModel,
-                now: startedAt
-            )
-            rawCookies = result.cookies
-            aiUsed = result.used
-            aiClassified = result.classifiedCount
-            aiSkippedReason = result.skippedReason
-        }
-
+        // Eerst de regellaag: dat is lokale logica zonder wachttijd, dus de
+        // gebruiker ziet binnen seconden een echte uitslag. De AI verfijnt
+        // daarna — en als die niet afkomt, staat het resultaat er al.
         phase = .applyingRules
-        let records = await Self.buildRecords(
+        var records = await Self.buildRecords(
             rawCookies: rawCookies,
             whitelist: whitelist,
             trackerList: trackerList,
@@ -137,6 +155,57 @@ final class ScanService: ObservableObject {
             protectedCookies: protectedCookies,
             domainRules: domainRules
         )
+
+        let voorlopig = ScanRun(
+            startedAt: startedAt,
+            finishedAt: Date(),
+            sources: statuses,
+            records: records,
+            aiUsed: false,
+            aiClassifiedCount: 0,
+            aiSkippedReason: (includeAI && ollamaEnabled) ? "AI-classificatie loopt nog." : nil,
+            origin: "app"
+        )
+        lastRun = voorlopig
+
+        var aiUsed = false
+        var aiSkippedReason: String?
+        var aiClassified = 0
+
+        if includeAI, ollamaEnabled, !Task.isCancelled {
+            phase = .aiClassification
+            let result = await Self.classifyWithAI(
+                rawCookies: rawCookies,
+                trackerList: trackerList,
+                model: ollamaModel,
+                now: startedAt,
+                onProgress: { done, total in
+                    Task { @MainActor in
+                        ScanService.shared.aiProgress = (done, total)
+                    }
+                }
+            )
+            if Task.isCancelled {
+                // Gestopt tijdens de AI-fase: de regellaag-uitslag blijft staan.
+                phase = .savingReport
+                try? await Self.persist(run: voorlopig)
+                return
+            }
+            rawCookies = result.cookies
+            aiUsed = result.used
+            aiClassified = result.classifiedCount
+            aiSkippedReason = result.skippedReason
+
+            phase = .checkingSafelist
+            records = await Self.buildRecords(
+                rawCookies: rawCookies,
+                whitelist: whitelist,
+                trackerList: trackerList,
+                now: startedAt,
+                protectedCookies: protectedCookies,
+                domainRules: domainRules
+            )
+        }
         phase = .checkingSafelist
 
         let finishedAt = Date()
@@ -211,7 +280,8 @@ final class ScanService: ObservableObject {
         rawCookies: [RawCookie],
         trackerList: TrackerList,
         model: String,
-        now: Date
+        now: Date,
+        onProgress: (@Sendable (Int, Int) -> Void)? = nil
     ) async -> (cookies: [RawCookie], used: Bool, classifiedCount: Int, skippedReason: String?) {
         let client = OllamaClient()
         do {
@@ -240,7 +310,7 @@ final class ScanService: ObservableObject {
                     browser: cookie.browser
                 )
             }
-            let judgements = await client.classifyAll(model: model, cookies: inputs)
+            let judgements = await client.classifyAll(model: model, cookies: inputs, onProgress: onProgress)
 
             var byKey: [String: LLMCookieJudgement] = [:]
             for judgement in judgements {

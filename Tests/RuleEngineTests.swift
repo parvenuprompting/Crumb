@@ -27,10 +27,10 @@ final class RuleEngineTests: XCTestCase {
         )
     }
 
-    func testTrackerDomainIsMarketingTrackingAndReview() {
+    func testTrackerDomainIsMarketingTrackingAndSafeToClean() {
         let result = engine.classify(raw: raw(domain: "cdn.adnxs.com", name: "uuid2"), protection: .none)
         XCTAssertEqual(result.category, .marketingTracking)
-        XCTAssertEqual(result.verdict, .reviewSuggested)
+        XCTAssertEqual(result.verdict, .safeToClean)
     }
 
     func testAnalyticsNameRecentIsKept() {
@@ -40,11 +40,11 @@ final class RuleEngineTests: XCTestCase {
         XCTAssertEqual(result.verdict, .keep)
     }
 
-    func testAnalyticsNameOlderThan30DaysIsReview() {
+    func testAnalyticsNameOlderThan30DaysIsSafeToClean() {
         let creation = Date(timeIntervalSince1970: 1_000_000_000 - 40 * 24 * 60 * 60)
         let result = engine.classify(raw: raw(name: "_ga", creation: creation), protection: .none)
         XCTAssertEqual(result.category, .analytics)
-        XCTAssertEqual(result.verdict, .reviewSuggested)
+        XCTAssertEqual(result.verdict, .safeToClean)
     }
 
     func testSecureHttpOnlyPersistentUnknownIsFunctional() {

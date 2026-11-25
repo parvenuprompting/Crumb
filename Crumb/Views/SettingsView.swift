@@ -62,6 +62,7 @@ struct SettingsView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 4)
         }
+        .sheet(isPresented: $showDryRun) { dryRunSheet }
         .onAppear {
             agentInstalled = LaunchAgentManager.isInstalled()
             auditEntries = AuditLog.allEntries(limit: 200)

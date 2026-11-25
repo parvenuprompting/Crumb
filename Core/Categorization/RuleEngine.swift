@@ -29,12 +29,12 @@ struct RuleEngine: Sendable {
         case .marketingTracking:
             return (
                 category,
-                .reviewSuggested,
-                "Matcht bekende tracking/advertentie-domein — opschoonkandidaat volgens de regellaag. Bevestigt de AI dit, dan wordt het advies 'opschoonbaar'."
+                .safeToClean,
+                "Bekend tracking-/advertentiedomein. De regellaag beslist dit zelf: dit is geen inlogcookie. Er wordt eerst een back-up gemaakt voordat hij weggaat."
             )
         case .analytics:
             if let creation = raw.creation, now.timeIntervalSince(creation) > Self.analyticsAgeThreshold {
-                return (category, .reviewSuggested, "Analytics-cookie ouder dan 30 dagen — opschoonkandidaat volgens regellaag.")
+                return (category, .safeToClean, "Analytics-cookie ouder dan 30 dagen. De regellaag beslist dit zelf; recente analytics blijven staan.")
             }
             return (category, .keep, "Analytics-cookie, recent aangemaakt — nog bewaren.")
         case .functional:
@@ -48,16 +48,13 @@ struct RuleEngine: Sendable {
         nonEssentialCategory(raw: raw)
     }
 
-    /// Cookies die de AI-laag mag beoordelen: onbekende cookies (voor
-    /// categorisatie) plus regel-laag-kandidaten (voor bevestiging van
-    /// 'opschoonbaar' — de dubbele goedkeuring).
+    /// Cookies die de AI-laag mag beoordelen: alleen de onbekende. Bekende
+    /// trackers en oude analytics beslist de regellaag zelf — daar is geen
+    /// tweede ronde voor nodig (en een scan hoeft er dus ook niet op te wachten).
     func isAICandidate(_ raw: RawCookie) -> Bool {
         switch nonEssentialCategory(raw: raw) {
-        case .unknown, .marketingTracking:
+        case .unknown, .thirdPartyUnknown:
             return true
-        case .analytics:
-            guard let creation = raw.creation else { return false }
-            return now.timeIntervalSince(creation) > Self.analyticsAgeThreshold
         default:
             return false
         }

@@ -25,7 +25,9 @@ struct OverviewView: View {
 
                 if scanService.isScanning {
                     ScanProgressSection()
-                } else if let run {
+                }
+
+                if let run {
                     dashboardSection(run)
                     recommendationsSection
                     Divider().opacity(0.3)
@@ -43,7 +45,7 @@ struct OverviewView: View {
                             recentActivitySection
                         }
                     }
-                } else {
+                } else if !scanService.isScanning {
                     emptyState
                 }
             }
@@ -79,7 +81,7 @@ struct OverviewView: View {
                 .font(.callout)
                 .foregroundStyle(.secondary)
             Button("Scan nu") {
-                Task { await scanService.runScan() }
+                scanService.startScan()
             }
         }
     }
@@ -104,7 +106,7 @@ struct OverviewView: View {
                 }
                 Spacer()
                 Button {
-                    Task { await scanService.runScan() }
+                    scanService.startScan()
                 } label: {
                     Text(scanService.isScanning ? "Bezig…" : "Scan nu")
                 }
@@ -224,8 +226,15 @@ struct OverviewView: View {
 
         var body: some View {
             VStack(alignment: .leading, spacing: 10) {
-                SectionHeader(title: "Scan loopt")
-                let steps: [ScanPhase] = [.detectingBrowsers, .readingStores, .applyingRules, .aiClassification, .checkingSafelist, .savingReport]
+                HStack(alignment: .firstTextBaseline) {
+                    SectionHeader(title: "Scan loopt")
+                    Spacer()
+                    Button("Stop scan") {
+                        scanService.cancelScan()
+                    }
+                    .controlSize(.small)
+                }
+                let steps = ScanPhase.allCases.filter { $0 != .idle }
                 let current = scanService.phase
 
                 VStack(alignment: .leading, spacing: 5) {
@@ -247,6 +256,12 @@ struct OverviewView: View {
                                 .font(.callout)
                                 .foregroundStyle(step == current ? .primary : (index < currentIndex ? .secondary : .tertiary))
                             Spacer()
+                            if step == .aiClassification, let voortgang = scanService.aiProgress {
+                                Text("\(voortgang.done) van \(voortgang.total) batches")
+                                    .font(.caption)
+                                    .monospacedDigit()
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                     }
                 }
@@ -310,7 +325,7 @@ struct OverviewView: View {
             let results = await QuickCleanEngine.delete(records: targetsForDeletion, preset: preset)
             isDeleting = false
             deleteResults = results
-            await scanService.runScan()
+            scanService.startScan(includeAI: false)
             recentAudit = AuditLog.allEntries(limit: 5)
         }
     }

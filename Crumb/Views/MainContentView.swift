@@ -102,7 +102,7 @@ struct MenuPanelView: View {
             .frame(maxWidth: .infinity)
 
             Button("Scan nu") {
-                Task { await scanService.runScan() }
+                scanService.startScan()
             }
             .disabled(scanService.isScanning)
             .frame(maxWidth: .infinity)

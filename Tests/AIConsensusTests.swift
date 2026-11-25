@@ -98,10 +98,10 @@ final class AIConsensusTests: XCTestCase {
         XCTAssertEqual(outcome.verdict, .reviewSuggested)
     }
 
-    func testBuildBatchesAreDeterministicAndSorted() {
-        let cookies = (0..<30).map { i in
+    func testBuildBatchesPreserveInputOrder() {
+        let cookies = (0..<12).map { i in
             CookiePromptInput(
-                domain: "d\(i % 10).com",
+                domain: "d\(i).com",
                 name: "n\(i)",
                 isSecure: false,
                 isHttpOnly: false,
@@ -111,22 +111,16 @@ final class AIConsensusTests: XCTestCase {
                 browser: "Chrome"
             )
         }
-        let batches1 = OllamaClient.buildBatches(cookies: cookies, cookiesPerBatch: 3, maxBatches: 5)
-        let batches2 = OllamaClient.buildBatches(cookies: cookies.reversed(), cookiesPerBatch: 3, maxBatches: 5)
+        let batches = OllamaClient.buildBatches(cookies: cookies, cookiesPerBatch: 5, maxBatches: 10)
 
-        XCTAssertEqual(batches1.count, 5)
-        XCTAssertEqual(batches1.map { $0.map(\.name) }, batches2.map { $0.map(\.name) })
-        // Elk domein blijft binnen één batch, en batches zijn op domein gesorteerd.
-        for batch in batches1 {
-            XCTAssertEqual(Set(batch.map(\.domain)).count, 1)
-        }
-        let domains = batches1.compactMap(\.first?.domain)
-        XCTAssertEqual(domains, domains.sorted())
+        // Volgorde van de aanroeper blijft staan: onbekend-eerst-sortering van
+        // ScanService mag niet door een domein-sortering overschreven worden.
+        XCTAssertEqual(batches.flatMap { $0 }.map(\.name), cookies.map(\.name))
+        XCTAssertEqual(batches.map(\.count), [5, 5, 2])
     }
 
     func testBuildBatchesCoversAllCookiesUnderCap() {
-        // 4 cookies per domein, 3 per batch: elk domein splitst in 3+1,
-        // alle cookies blijven binnen de cap.
+        // 12 cookies, 3 per batch, ruime cap: 4 volle batches, niets kwijt.
         let cookies = (0..<12).map { i in
             CookiePromptInput(
                 domain: "d\(i % 3).com",
@@ -141,9 +135,26 @@ final class AIConsensusTests: XCTestCase {
         }
         let batches = OllamaClient.buildBatches(cookies: cookies, cookiesPerBatch: 3, maxBatches: 10)
         XCTAssertEqual(batches.flatMap { $0 }.count, 12)
-        XCTAssertEqual(batches.count, 6)
-        XCTAssertTrue(batches.allSatisfy { (1...3).contains($0.count) })
-        XCTAssertTrue(batches.allSatisfy { Set($0.map(\.domain)).count == 1 })
+        XCTAssertEqual(batches.count, 4)
+        XCTAssertTrue(batches.allSatisfy { $0.count <= 3 })
+    }
+
+    func testBuildBatchesRespectsCap() {
+        let cookies = (0..<100).map { i in
+            CookiePromptInput(
+                domain: "d\(i).com",
+                name: "n\(i)",
+                isSecure: false,
+                isHttpOnly: false,
+                isSessionOnly: false,
+                hasExpiry: false,
+                expiresInSeconds: nil,
+                browser: "Chrome"
+            )
+        }
+        let batches = OllamaClient.buildBatches(cookies: cookies, cookiesPerBatch: 10, maxBatches: 3)
+        XCTAssertEqual(batches.count, 3)
+        XCTAssertEqual(batches.flatMap { $0 }.count, 30)
     }
 
     func testUnknownLLMCategoryFallsBackToRecordCategory() {
