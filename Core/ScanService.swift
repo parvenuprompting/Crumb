@@ -102,6 +102,14 @@ final class ScanService: ObservableObject {
         isScanning = false
         phase = .idle
         lastError = "Scan gestopt."
+        // De uitslag die er al stond hoort bewaard te blijven, ook al is de
+        // taak geannuleerd: daarom een eigen taak die niet meegenomen wordt
+        // in de annulering.
+        if let run = lastRun {
+            Task.detached {
+                try? await ScanService.persist(run: run)
+            }
+        }
     }
 
     func runScan(includeAI: Bool = true) async {
