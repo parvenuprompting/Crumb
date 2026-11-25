@@ -22,11 +22,16 @@ struct MainContentView: View {
                     Label("Trends", systemImage: "chart.line.uptrend.xyaxis")
                 }
                 .tag(2)
+            SporenView()
+                .tabItem {
+                    Label("Sporen", systemImage: "person.crop.circle.badge.questionmark")
+                }
+                .tag(3)
             SettingsView()
                 .tabItem {
                     Label("Instellingen", systemImage: "gearshape")
                 }
-                .tag(3)
+                .tag(4)
         }
         .padding()
         .sheet(isPresented: $showOnboarding) {
