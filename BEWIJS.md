@@ -25,10 +25,17 @@ AI-fase met eigen ogen gezien, op **Stop scan** gedrukt (uitslag bleef, run werd
 aangeklikt (selectie + Verwijderen werd actief), Instellingen → Whitelist gecontroleerd.
 
 ## Reviewer
-google/gemini-4-neon (andere familie dan de bouwer) — vonnis: "klaar na deze punten", drie blokkerende punten.
-Alle drie nagerekend in de code en gerepareerd: (1) regellaag gaf nooit `safeToClean`, (2) batches werden
-alfabetisch op domein gesorteerd en op 25 gekapt, (3) selectie in de cookielijst werd opgeslokt door een
-eigen tap-handler.
+google/gemini-4-neon — ontvangstbewijs: `bewijs/review-20261125-175500.json`
+(OpenRouter-id `gen-1795625676-GPB5ccnY6Ppu1mltOBjy`, na te vragen bij OpenRouter: model, kosten, tijdstip).
+
+Vonnisronde 1 (audit van de hele app): "klaar na deze punten" — drie blokkerende punten, alle drie gerepareerd:
+(1) regellaag gaf nooit `safeToClean`, (2) batches werden alfabetisch op domein gesorteerd en op 25 gekapt,
+(3) selectie in de cookielijst werd opgeslokt door een eigen tap-handler.
+
+Vonnisronde 2 (na de fix, op `RuleEngine.swift`): vond één **echt** gat in mijn eigen reparatie — een
+HttpOnly+Secure inlogcookie op een domein dat óók in de trackerlijst staat (sociaal/advertentieplatform)
+zou alsnog "opschoonbaar" worden. Gerepareerd: de functioneel-check staat nu vóór de trackerlijst, met
+test `testLoginCookieOnTrackerDomainIsNeverSafeToClean`. 173 tests groen.
 
 ## Uitkomst
 - Opruimbare cookies: **3 → 378** van 2558 (gemeten in de draaiende app, niet uit de tests).
@@ -36,5 +43,8 @@ eigen tap-handler.
 - Venster opent weer bij elke start (state restoration uit).
 - Whitelist: 22 domeinen, bandlab.com inbegrepen; tests bewijzen dat ze in geen enkele snelkeuze en niet in
   de automatische schoonmaak voorkomen.
+- De klaar-poort (`~/bin/poort.py`, huis-regels §20) weigert een reviewer die alleen als naam in dit
+  bestand staat; er moet een ontvangstbewijs met OpenRouter-id liggen. Tegenproef gedaan: zonder bewijs
+  rood, met een reviewer uit dezelfde familie rood.
 - **Niet bewezen:** een volledige scan tot en met de laatste AI-batch (bewust gestopt), de widget, en
   auto-clean in het echt (staat uit tot T. hem test).

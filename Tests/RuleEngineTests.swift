@@ -62,6 +62,18 @@ final class RuleEngineTests: XCTestCase {
         XCTAssertEqual(result.verdict, .keep)
     }
 
+    func testLoginCookieOnTrackerDomainIsNeverSafeToClean() {
+        // Bevinding van de reviewer (25-11-2026): een HttpOnly+Secure cookie op
+        // een domein dat óók in de trackerlijst staat is een inlog. Stond de
+        // trackerlijst vooraan, dan werd zo'n cookie 'opschoonbaar'.
+        let result = engine.classify(
+            raw: raw(domain: "cdn.adnxs.com", name: "sessie", isSecure: true, isHttpOnly: true),
+            protection: .none
+        )
+        XCTAssertEqual(result.category, .functional)
+        XCTAssertEqual(result.verdict, .keep)
+    }
+
     func testLockedProtectionOverridesTrackerClassification() {
         let result = engine.classify(
             raw: raw(domain: "adnxs.com", name: "uuid2"),

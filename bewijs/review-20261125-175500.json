@@ -1,0 +1,36 @@
+{
+  "id": "gen-1795625676-GPB5ccnY6Ppu1mltOBjy",
+  "model_gevraagd": "google/gemini-4-neon",
+  "model_gekregen": "google/gemini-4-neon",
+  "familie": "gemini",
+  "created": 1795625676,
+  "seconden": 23.8,
+  "usage": {
+    "prompt_tokens": 988,
+    "completion_tokens": 2225,
+    "total_tokens": 3213,
+    "cost": 0.036339,
+    "is_byok": false,
+    "prompt_tokens_details": {
+      "cached_tokens": 0,
+      "cache_write_tokens": 0,
+      "audio_tokens": 0,
+      "video_tokens": 0
+    },
+    "cost_details": {
+      "upstream_inference_cost": 0.036339,
+      "upstream_inference_prompt_cost": 0.002964,
+      "upstream_inference_completions_cost": 0.033375
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 1314,
+      "image_tokens": 0,
+      "audio_tokens": 0
+    }
+  },
+  "bestand": "Core/Categorization/RuleEngine.swift",
+  "bestand_sha256": "1b3dabbbb8757b8798bfb29a1fb97a33792c98521d0284dcccdfb91075ffdddd",
+  "vraag_sha256": "88548bf1f54c9618a6f14955971ce53fc5a28b14720a41e620ebe0dfddd8819f",
+  "antwoord_sha256": "dc8fc591d546c31be0644b2cbf636086d2826d5c4de5fa3933cbe2b1da5ea24e",
+  "antwoord": "VONNIS: Ja, een inlogcookie kan via twee directe paden in `RuleEngine` en één indirect pad via de AI-laag als opschoonbaar (`.safeToClean`) eindigen zodra `protection == .none`.\n\nBEVINDINGEN\n- [hoog] waar: `classify(raw:protection:)` + `nonEssentialCategory(raw:)` (regels 26–33, 64–66) / wat: Een inlogcookie op een domein uit `trackerList` krijgt direct `.safeToClean` wanneer `protection == .none`. / bewijs: `trackerList.isTracker(domain: raw.domain)` wordt geëvalueerd vóór de controle op `isHttpOnly && isSecure`, en keert `.marketingTracking` terug, wat in `classify` onvoorwaardelijk `.safeToClean` oplevert. Op dual-purpose domeinen (waar gebruikers ook inloggen, bijv. social/advertentieplatformen) wordt een `HttpOnly`+`Secure` inlogcookie zo direct verwijderd. / fix: Zet de check op beveiligde/sessie-cookies (`isHttpOnly`, `isSecure`, `isSessionOnly`) vóór `trackerList.isTracker`, of sta `.safeToClean` op tracker-domeinen alleen toe voor niet-`HttpOnly` cookies (of degradeer naar `.reviewSuggested`).\n- [middel] waar: `classify(raw:protection:)` + `isAnalyticsName(_:)` (regels 7–12, 34–38, 61–63, 72–77) / wat: Een persistent inlogcookie ouder dan 30 dagen met een naam die matcht op een analytics-prefix (met name `mp_`) krijgt `.safeToClean` wanneer `protection == .none`. / bewijs: `isAnalyticsName` gebruikt `hasPrefix` voor patronen op `_` (`\"mp_\"`, `\"_ga_\"`). Een langlopend inlogcookie zoals `mp_session` of `mp_auth` (bijv. \"onthoud mij\"-cookie) wordt als `.analytics` geclassificeerd — ook als het `HttpOnly` en `Secure` is — en na 30 dagen (`analyticsAgeThreshold`) als `.safeToClean` gemarkeerd. / fix: Sluit `HttpOnly`-cookies uit van de analytics-regel (echte client-side analytics-cookies zoals Mixpanel/GA zijn zelden `HttpOnly`) en maak prefix-patronen zoals `mp_` specifieker of koppel ze aan niet-`HttpOnly`.\n- [middel] waar: `nonEssentialCategory(raw:)` + `isAICandidate(_:)` (regels 52–59, 67–70) / wat: Sessie-inlogcookies vallen buiten `.functional` en worden als `.unknown` doorgestuurd naar de AI-laag. / bewijs: Regel 67 vereist `!raw.isSessionOnly` voor `.functional`. Een standaard sessie-inlogcookie (`isHttpOnly == true && isSecure == true && isSessionOnly == true`) krijgt daardoor `.unknown`, waarna `isAICandidate` `true` teruggeeft (zonder `protection` te controleren). Als de AI-laag `.safeToClean` kan uitdelen, kan dit inlogcookie alsnog opschoonbaar eindigen. / fix: Laat `raw.isHttpOnly && raw.isSecure` ook voor `isSessionOnly == true` (juist een sterk signaal voor sessie-inlog) onder `.functional` vallen, en geef `protection` mee aan `isAICandidate` zodat `.locked`/`.reviewOnly` nooit naar de AI gaan.\n\nWAT IK NIET KON NARECKENEN: Hoe `CookieProtection` vóór `RuleEngine` wordt bepaald (welke inlogcookies `.none` krijgen), welke domeinen in `TrackerList` staan en hoe `isTracker(domain:)` (exact vs. subdomein) matcht, en of de aanroepende code / AI-laag `.safeToClean` mag teruggeven voor `isAICandidate`-cookies."
+}

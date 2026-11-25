@@ -61,14 +61,18 @@ struct RuleEngine: Sendable {
     }
 
     private func nonEssentialCategory(raw: RawCookie) -> CookieCategory {
+        // Beveiligde, persistente cookies zijn éérst functioneel: dat zijn de
+        // inlogs. Stond de trackerlijst vooraan, dan werd een inlogcookie op een
+        // domein dat ook in die lijst staat (sociaal, advertentieplatform) als
+        // 'opschoonbaar' beoordeeld. Gevonden door de reviewer op 25-11-2026.
+        if raw.isHttpOnly && raw.isSecure && !raw.isSessionOnly {
+            return .functional
+        }
         if Self.isAnalyticsName(raw.name) {
             return .analytics
         }
         if trackerList.isTracker(domain: raw.domain) {
             return .marketingTracking
-        }
-        if raw.isHttpOnly && raw.isSecure && !raw.isSessionOnly {
-            return .functional
         }
         return .unknown
     }
