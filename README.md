@@ -80,6 +80,7 @@ rm -rf build/
 - **Home** is een dashboard: privacy-status, hoofdactie "Veilig opschonen", **aanbevelingen gesorteerd op impact** (veilig op te ruimen, ouder dan 90 dagen, terugkerende trackers, top-trackingdomeinen), snelkeuzes en **live scanvoortgang** met per-browserstatus.
 - **Cookies** is een **split view**: compacte lijst links (filterchips, sorteren op ouderdom/churn, bulk-whitelist) en een **detailpaneel** rechts met volledige uitleg, metadata, churn en acties (verwijderen, whitelist, alleen deze cookie beschermen, vergelijkbare cookies bekijken).
 - **Trends** toont een **privacy-score** met uitleg, veranderingen t.o.v. de vorige run (nieuw/verdwijnen, trackerdruk in %), cross-browser duplicaten, churn-top en hardnekkige tracking-domeinen.
+- **Sporen** is de andere helft van hetzelfde probleem: niet wat sites over je opslaan, maar wat er over je *naam* te vinden is. Per bron (zoekmachines, werk en code, sociaal, Nederlandse databrokers) bouwt Crumb de zoeklink met jouw naam erin — de app scrapet niets en stuurt niets. Wat je vindt markeer je; Crumb zet de wettelijke termijn (art. 12 lid 3 AVG) en maakt per spoor een kant-en-klaar verwijderverzoek (art. 17) dat je zelf verstuurt.
 - Elk advies verklaart zichzelf: "Beschermd: naam bevat 'session'", "Review vereist: secure + httpOnly + jonger dan 24 uur", "Niet verwijderd: AI en regellaag zijn het niet eens", "Verwijderbaar: tracker, ouder dan 30 dagen, geen bescherming".
 
 ## Snelkeuzes (1-klik opschonen)
@@ -137,6 +138,7 @@ Het script bouwt Release, tekent met hardened runtime (inclusief de embedded `Cr
 - [x] Fase 8 — Developer ID-signing + notarization (`scripts/build-release.sh`)
 - [x] Fase 9 — Verharding & beheer: dubbele goedkeuring afgedwongen, back-ups + herstellen, Safari-parser (canoniek binarycookies-formaat), trackerlijst via EasyPrivacy, whitelist-normalisatie, churn-detectie, log-/back-uprotatie, agent-notificaties, per-cookie acties, CI-releaseverificatie
 - [x] Fase 10 — Vertrouwen & inzichten: onboarding, dashboard met impact-gesorteerde aanbevelingen, cookie-detailpaneel, verklarende adviezen, scanvoortgang, domeinregels, auto-clean dry-run/limiet/drempel, instelbare planning, audit-log filteren/exporteren, privacy-score, cross-browser duplicaten, nieuw/verdwijnen-diff, handmatige cookie-bescherming
+- [ ] Fase 11 — Sporen: nulmeting per bron + AVG-verwijderverzoeken (eerste slice: catalogus, briefgenerator, lokale administratie)
 - [x] Fase 9 — Homepage met interactieve snelkeuzes voor 1-klik opschonen
 
 ## Over de maker
