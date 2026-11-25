@@ -194,6 +194,6 @@ struct OnboardingView: View {
     private func finish() {
         UserDefaults.standard.set(true, forKey: "onboardingCompleted")
         dismiss()
-        Task { await scanService.runScan() }
+        scanService.startScan()
     }
 }

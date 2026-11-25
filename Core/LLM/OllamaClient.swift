@@ -242,37 +242,39 @@ struct OllamaClient: Sendable {
         }
     }
 
-    /// Bepaalt welke batches de AI krijgt, deterministisch: input gesorteerd op
-    /// (domein, naam), gegroepeerd per domein, gekapt op `maxBatches`. Zelfde
-    /// input levert altijd dezelfde batches — ook bij een gewijzigde cap.
+    /// Verdeelt de kandidaten in batches, in de volgorde die de aanroeper
+    /// aanlevert (ScanService sorteert op prioriteit: onbekend eerst). Batches
+    /// worden gevuld tot `cookiesPerBatch`, ongeacht het domein — anders
+    /// bepaalde een alfabetische domeinvolgorde welke cookies de AI zag en
+    /// bleven de échte kandidaten buiten beeld.
     static func buildBatches(
         cookies: [CookiePromptInput],
         cookiesPerBatch: Int,
         maxBatches: Int
     ) -> [[CookiePromptInput]] {
         guard cookiesPerBatch > 0, maxBatches > 0 else { return [] }
-        let sorted = cookies.sorted { a, b in
-            let da = a.domain.lowercased()
-            let db = b.domain.lowercased()
-            if da != db { return da < db }
-            return a.name.lowercased() < b.name.lowercased()
-        }
-        let byDomain = Dictionary(grouping: sorted, by: \.domain)
         var batches: [[CookiePromptInput]] = []
-        for domain in byDomain.keys.sorted() {
-            let group = byDomain[domain] ?? []
-            var index = group.startIndex
-            while index < group.endIndex {
-                let end = group.index(index, offsetBy: cookiesPerBatch, limitedBy: group.endIndex) ?? group.endIndex
-                batches.append(Array(group[index..<end]))
-                index = end
+        var huidig: [CookiePromptInput] = []
+        huidig.reserveCapacity(cookiesPerBatch)
+        for cookie in cookies {
+            if huidig.count == cookiesPerBatch {
+                batches.append(huidig)
                 if batches.count >= maxBatches { return batches }
+                huidig.removeAll(keepingCapacity: true)
             }
+            huidig.append(cookie)
+        }
+        if !huidig.isEmpty, batches.count < maxBatches {
+            batches.append(huidig)
         }
         return batches
     }
 
-    func classifyAll(model: String, cookies: [CookiePromptInput]) async -> [LLMCookieJudgement] {
+    func classifyAll(
+        model: String,
+        cookies: [CookiePromptInput],
+        onProgress: (@Sendable (Int, Int) -> Void)? = nil
+    ) async -> [LLMCookieJudgement] {
         let batches = Self.buildBatches(
             cookies: cookies,
             cookiesPerBatch: cookiesPerBatch,
@@ -280,8 +282,11 @@ struct OllamaClient: Sendable {
         )
 
         var judgements: [LLMCookieJudgement] = []
+        let total = batches.count
+        let voortgang = onProgress
         await withTaskGroup(of: [LLMCookieJudgement].self) { group in
             var inFlight = 0
+            var klaar = 0
             var iterator = batches.makeIterator()
 
             func addNext() {
@@ -299,7 +304,14 @@ struct OllamaClient: Sendable {
             for _ in 0..<maxConcurrentBatches { addNext() }
             while let result = await group.next() {
                 inFlight -= 1
+                klaar += 1
                 judgements.append(contentsOf: result)
+                voortgang?(klaar, total)
+                // Stoppen: geen nieuwe batches meer inzetten en de groep leeg laten lopen.
+                if Task.isCancelled {
+                    group.cancelAll()
+                    break
+                }
                 addNext()
             }
         }

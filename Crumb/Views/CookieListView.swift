@@ -148,23 +148,23 @@ struct CookieListView: View {
     private var filterBar: some View {
         HStack(spacing: 8) {
             Picker("", selection: $browserFilter) {
-                Text("Alle").tag("Alle")
+                Text("Alle browsers").tag("Alle")
                 ForEach(availableBrowsers, id: \.self) { Text($0).tag($0) }
             }
             .labelsHidden()
-            .frame(width: 100)
+            .frame(width: 120)
 
             Picker("", selection: $categoryFilter) {
-                Text("Alle").tag("Alle")
+                Text("Alle categorieën").tag("Alle")
                 ForEach(CookieCategory.allCases, id: \.self) { category in
                     Text(category.displayName).tag(category.displayName)
                 }
             }
             .labelsHidden()
-            .frame(width: 150)
+            .frame(width: 165)
 
             Picker("", selection: $verdictFilter) {
-                Text("Alle").tag("Alle")
+                Text("Alle adviezen").tag("Alle")
                 ForEach(CookieVerdict.allCases, id: \.self) { verdict in
                     Text(verdict.displayName).tag(verdict.displayName)
                 }
@@ -173,7 +173,7 @@ struct CookieListView: View {
             .frame(width: 150)
 
             Picker("", selection: $protectionFilter) {
-                Text("Alle").tag("Alle")
+                Text("Alle bescherming").tag("Alle")
                 Text("Vergrendeld").tag("Vergrendeld")
                 Text("Review-only").tag("Review-only")
                 Text("Geen bescherming").tag("Geen bescherming")
@@ -289,12 +289,17 @@ struct CookieListView: View {
                             }
                         }
                         .contentShape(Rectangle())
-                        .onTapGesture {
-                            detailRecord = record
-                        }
                 }
             }
             .listStyle(.inset(alternatesRowBackgrounds: true))
+            // De detailweergave volgt de selectie. Een eigen `.onTapGesture`
+            // op de rij slokte de klik op, waardoor `selection` leeg bleef en
+            // "Verwijderen…" nooit actief werd.
+            .onChange(of: selection) { _, nieuw in
+                guard nieuw.count == 1, let id = nieuw.first,
+                      let gekozen = records.first(where: { $0.id == id }) else { return }
+                detailRecord = gekozen
+            }
         }
     }
 
@@ -317,7 +322,8 @@ struct CookieListView: View {
             showNotice("Cookie handmatig beschermd — actief na de volgende scan.")
         }
         try? store.save()
-        Task { await scanService.runScan() }
+        // Alleen de regellaag opnieuw: dit is een lokale wijziging, geen nieuwe meting.
+        scanService.startScan(includeAI: false)
     }
 
     private func showNotice(_ message: String) {
@@ -351,7 +357,8 @@ struct CookieListView: View {
             try? AuditLog.append(entries)
             isDeleting = false
             deleteResults = results
-            await scanService.runScan()
+            // Na een verwijdering is de AI opnieuw draaien zonde van de tijd.
+            scanService.startScan(includeAI: false)
             selection.removeAll()
         }
     }

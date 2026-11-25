@@ -70,9 +70,24 @@ final class ScanServiceConsensusTests: XCTestCase {
         XCTAssertEqual(records.first?.verdict, .keep)
     }
 
-    func testAIKeepOnTrackerStaysKeep() async {
+    func testAIKeepWithoutFunctionalSignalDoesNotRescueTracker() async {
+        // De lokale AI is zwak: "keep" zonder functionele categorie is geen
+        // reden om een bekende tracker te laten staan. De regellaag wint.
         let records = await ScanService.buildRecords(
             rawCookies: [raw(domain: "adnxs.com", aiCategory: .marketingTracking, aiVerdict: .keep)],
+            whitelist: [],
+            trackerList: TrackerList(suffixes: ["adnxs.com"]),
+            now: Date(timeIntervalSince1970: 1_700_000_000)
+        )
+
+        XCTAssertEqual(records.first?.verdict, .safeToClean)
+    }
+
+    func testAIKeepWithFunctionalSignalRescuesCookie() async {
+        // Noemt de AI het cookie functioneel/essentieel (een inlog), dan blijft
+        // het staan — dat is het vangnet tegen kapotte logins.
+        let records = await ScanService.buildRecords(
+            rawCookies: [raw(domain: "adnxs.com", aiCategory: .functional, aiVerdict: .keep)],
             whitelist: [],
             trackerList: TrackerList(suffixes: ["adnxs.com"]),
             now: Date(timeIntervalSince1970: 1_700_000_000)
