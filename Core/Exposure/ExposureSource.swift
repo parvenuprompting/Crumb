@@ -112,7 +112,7 @@ public enum ExposureCatalog {
         ExposureSource(
             id: "wieowie", naam: "Wieowie", categorie: .databroker,
             urlTemplate: "https://www.wieowie.nl/zoek?q={naam}",
-            uitleg: "Nederlandse personenzoeker: naam, woonplaats en soms leeftijd, zonder dat je er ooit iets hebt ingevuld.",
+            uitleg: "Verzamelpagina die je naam bij 28 andere diensten opzoekt — een handig startpunt, maar geen eigen database: wat je ziet, komt van de bronnen eronder.",
             verwijderRoute: "Verwijderverzoek per e-mail; je hebt recht op verwijdering (AVG artikel 17)."),
         ExposureSource(
             id: "telefoonboek", naam: "Telefoonboek.nl", categorie: .databroker,
